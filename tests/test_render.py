@@ -106,3 +106,16 @@ def test_playbook_syntax(playbook, ansible_env):
     proc = subprocess.run([exe, "--syntax-check", str(ROOT / "playbooks" / playbook)],
                           cwd=str(ROOT), env=ansible_env, capture_output=True, text=True)
     assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
+def test_preflight_verdict_lists_all_failures(tmp_path, ansible_env):
+    exe = ansible_bin("ansible-playbook")
+    if exe is None:
+        pytest.skip("ansible-playbook not installed")
+    proc = subprocess.run([exe, str(ROOT / "tests" / "verdict.yml"), "-e", "out_dir=%s" % tmp_path],
+                          cwd=str(ROOT), env=ansible_env, capture_output=True, text=True,
+                          stdin=subprocess.DEVNULL)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    fail_msg = (tmp_path / "verdict-fail-case.txt").read_text().strip()
+    assert fail_msg == "preflight failed on localhost: uid_set, slurm_query, slurm_version"
+    assert (tmp_path / "verdict-pass-case.txt").read_text().strip() == "PASSED"

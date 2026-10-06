@@ -1,0 +1,24 @@
+---
+# Fails the host if any preflight check registered a failure; lists them all.
+- name: Preflight verdict
+  ansible.builtin.assert:
+    that: pf_failed | length == 0
+    fail_msg: "preflight failed on {{ inventory_hostname }}: {{ pf_failed | join(', ') }}"
+    success_msg: "preflight passed on {{ inventory_hostname }}"
+  vars:
+    pf_checks:
+      os: "{{ pf_c_os | default({}) }}"
+      hostname: "{{ pf_c_hostname | default({}) }}"
+      cgroup_v2: "{{ pf_c_cgroup | default({}) }}"
+      puppet: "{{ pf_c_puppet | default({}) }}"
+      clock: "{{ pf_c_clock | default({}) }}"
+      uid_set: "{{ pf_c_uid_set | default({}) }}"
+      uid_free: "{{ pf_c_uid_free | default({}) }}"
+      gid_free: "{{ pf_c_gid_free | default({}) }}"
+      accounts_present: "{{ pf_c_accounts | default({}) }}"
+      slurm_query: "{{ pf_slurm_version | default({}) }}"
+      slurm_version: "{{ pf_c_slurm_version | default({}) }}"
+      controller_reachable: "{{ pf_c_reach | default({}) }}"
+    pf_failed: >-
+      {{ pf_checks | dict2items | selectattr('value.failed', 'defined')
+         | selectattr('value.failed') | map(attribute='key') | list }}

@@ -1,7 +1,8 @@
 ---
 # Read-only checks. Every task here is safe on a production node: nothing is
-# installed, written or restarted. A failed assertion stops the deploy before
-# any change is made.
+# installed, written or restarted. Each check registers its result and the run
+# continues, so one pass reports every problem; the final verdict task then
+# fails the host (and stops a deploy) if any check failed.
 
 - name: OS is AlmaLinux 9
   ansible.builtin.assert:
@@ -12,12 +13,16 @@
       {{ inventory_hostname }} runs {{ ansible_facts.distribution }}
       {{ ansible_facts.distribution_version }}; this deployment targets AlmaLinux 9.
     quiet: true
+  register: pf_c_os
+  ignore_errors: true
 
 - name: Short hostname matches the inventory name (it becomes the Slurm NodeName)
   ansible.builtin.assert:
     that: ansible_facts.hostname == inventory_hostname.split('.')[0]
     fail_msg: "hostname -s is {{ ansible_facts.hostname }}, expected {{ inventory_hostname.split('.')[0] }}"
     quiet: true
+  register: pf_c_hostname
+  ignore_errors: true
 
 - name: Read the cgroup filesystem type
   ansible.builtin.command: stat -fc %T /sys/fs/cgroup
@@ -30,6 +35,8 @@
     that: pf_cgroup.stdout == "cgroup2fs"
     fail_msg: "/sys/fs/cgroup is {{ pf_cgroup.stdout }}, not cgroup2fs"
     quiet: true
+  register: pf_c_cgroup
+  ignore_errors: true
 
 - name: Collect service states
   ansible.builtin.service_facts:
@@ -48,6 +55,8 @@
       mc1_puppet_policy=warn to proceed anyway.
     quiet: true
   when: mc1_puppet_policy == 'fail'
+  register: pf_c_puppet
+  ignore_errors: true
 
 - name: Warn about the Puppet/OpenVox agent
   ansible.builtin.debug:
@@ -69,6 +78,8 @@
       - pf_chrony.stdout.split(',')[13] | trim != 'Not synchronised'
     fail_msg: "chronyc tracking: rc={{ pf_chrony.rc }} {{ pf_chrony.stdout | default('') }}{{ pf_chrony.stderr | default('') }}"
     quiet: true
+  register: pf_c_clock
+  ignore_errors: true
 
 - name: Read the passwd database
   ansible.builtin.getent:
@@ -86,10 +97,13 @@
   loop: "{{ mc1_service_accounts + (mc1_job_accounts | selectattr('create') | list) }}"
   loop_control:
     label: "{{ item.name }}"
+  register: pf_c_uid_set
+  ignore_errors: true
 
 - name: UIDs are free, or already belong to the same account name
   ansible.builtin.assert:
     that:
+      - item.uid is not none
       - uid_holders | length == 0 or uid_holders == [item.name]
       - item.name not in ansible_facts.getent_passwd or (ansible_facts.getent_passwd[item.name][1] | int) == (item.uid | int)
     fail_msg: >-
@@ -105,6 +119,8 @@
   loop: "{{ mc1_service_accounts + (mc1_job_accounts | selectattr('create') | list) }}"
   loop_control:
     label: "{{ item.name }}"
+  register: pf_c_uid_free
+  ignore_errors: true
 
 - name: Service-account GIDs are free, or already belong to the same group name
   ansible.builtin.assert:
@@ -121,6 +137,8 @@
   loop: "{{ mc1_service_accounts }}"
   loop_control:
     label: "{{ item.name }}"
+  register: pf_c_gid_free
+  ignore_errors: true
 
 - name: Existing job accounts and the job group are present
   ansible.builtin.assert:
@@ -129,6 +147,8 @@
       - (mc1_job_accounts | selectattr('create') | map(attribute='group') | difference(ansible_facts.getent_group.keys() | list)) | length == 0
     fail_msg: "missing accounts or groups on {{ inventory_hostname }}"
     quiet: true
+  register: pf_c_accounts
+  ignore_errors: true
 
 - name: Query the newest Slurm version in the enabled repositories
   ansible.builtin.shell: >-
@@ -139,12 +159,17 @@
   changed_when: false
   check_mode: false
   failed_when: pf_slurm_version.stdout | trim == ''
+  ignore_errors: true
 
 - name: Repositories offer Slurm >= slurm_min_version
   ansible.builtin.assert:
-    that: pf_slurm_version.stdout | trim is version(slurm_min_version, '>=')
+    that:
+      - pf_slurm_version.stdout | default('') | trim != ''
+      - pf_slurm_version.stdout | trim is version(slurm_min_version, '>=')
     fail_msg: "Slurm {{ pf_slurm_version.stdout | trim }} offered; need >= {{ slurm_min_version }}"
     quiet: true
+  register: pf_c_slurm_version
+  ignore_errors: true
 
 - name: Compute nodes reach the controller by name
   ansible.builtin.wait_for:
@@ -152,6 +177,8 @@
     port: 22
     timeout: 5
   when: inventory_hostname in groups['slurm_compute']
+  register: pf_c_reach
+  ignore_errors: true
 
 - name: Preflight summary
   ansible.builtin.debug:
@@ -161,3 +188,7 @@
       - "address: {{ ansible_facts.default_ipv4.address | default('none') }}"
       - "firewalld: {{ (ansible_facts.services['firewalld.service'] | default({})).get('state', 'absent') }}"
       - "puppet: {{ 'running' if (pf_puppet_active | bool) else 'not running' }}"
+
+
+- name: Verdict over every check above
+  ansible.builtin.include_tasks: verdict.yml

@@ -120,6 +120,6 @@ defects). Those belong in `docs/private/` and the private tracker.
 
 ## Testing
 
-`venv/bin/python -m pytest -q tests`: 25 tests, offline, about 7 s. Live
+`venv/bin/python -m pytest -q tests`: 26 tests, offline, about 13 s. Live
 validation on the cluster is `scripts/mc1-slurm-deploy validate`. Its JSON keys
 match the tracker's test-matrix rows.

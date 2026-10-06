@@ -1,0 +1,49 @@
+---
+# Test harness for roles/preflight/tasks/verdict.yml with fake check results.
+#   ansible-playbook tests/verdict.yml -e out_dir=/tmp/x
+- name: Verdict lists every failed check
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    pf_c_os: {failed: false}
+    pf_c_hostname: {failed: false}
+    pf_c_uid_set: {failed: true, msg: "mu2ebatch: set uid"}
+    pf_slurm_version: {failed: true, stdout: ""}
+    pf_c_slurm_version: {failed: true}
+    pf_c_reach: {skipped: true}          # controller does not run this check
+  tasks:
+    - name: Run the verdict, capture its message
+      block:
+        - name: Verdict
+          ansible.builtin.include_tasks: ../roles/preflight/tasks/verdict.yml
+        - name: Record an unexpected pass
+          ansible.builtin.copy:
+            content: "PASSED\n"
+            dest: "{{ out_dir }}/verdict-fail-case.txt"
+            mode: "0644"
+      rescue:
+        - name: Record the failure message
+          ansible.builtin.copy:
+            content: "{{ ansible_failed_result.msg }}\n"
+            dest: "{{ out_dir }}/verdict-fail-case.txt"
+            mode: "0644"
+
+- name: Verdict passes when nothing failed
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    pf_c_os: {failed: false}
+    pf_c_clock: {failed: false}
+    pf_c_reach: {skipped: true}
+  tasks:
+    - name: Verdict
+      ansible.builtin.include_tasks: ../roles/preflight/tasks/verdict.yml
+    - name: Record the pass
+      ansible.builtin.copy:
+        content: "PASSED\n"
+        dest: "{{ out_dir }}/verdict-pass-case.txt"
+        mode: "0644"

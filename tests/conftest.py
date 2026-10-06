@@ -31,7 +31,7 @@ def rendered(tmp_path_factory, ansible_env):
     out = tmp_path_factory.mktemp("rendered")
     proc = subprocess.run(
         [exe, str(ROOT / "tests" / "render.yml"), "-e", "out_dir=%s" % out],
-        cwd=str(ROOT), env=ansible_env, capture_output=True, text=True,
+        cwd=str(ROOT), env=ansible_env, capture_output=True, text=True, stdin=subprocess.DEVNULL,
     )
     assert proc.returncode == 0, proc.stdout + proc.stderr
     return out
