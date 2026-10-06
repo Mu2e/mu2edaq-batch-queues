@@ -15,8 +15,11 @@ are created here as local users with identical UID/GID on every node.
 
 **Status (2026-10-06): pre-install.** The repository and the read-only survey
 helper exist. The deployer, the configuration and the installation do not. Open
-design decisions and phase status are in the tracker, whose source is
-`docs/PROJECT-STATUS.html`. Update and republish it at each phase change.
+design decisions, phase status and the test and compatibility matrices are in
+the private tracker artifact https://claude.ai/artifact/VRZRbwR9QMDSQybSaJRxZG. Its source is
+`docs/private/PROJECT-STATUS.html`, which is git-ignored because it holds the
+access posture. Edit that file and republish it to the same artifact URL at each
+phase change.
 
 The repository lives at `Mu2e/mu2edaq-batch-queues` (public) and is a submodule
 of `mu2edaq-main`.

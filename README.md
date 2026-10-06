@@ -11,8 +11,9 @@ Slurm batch queues for the Mu2e **MC1 trigger worker cluster**: the
 | Ingress / ProxyJump | `mu2eshift@g2gateway01.fnal.gov` |
 
 **Status:** pre-install. The read-only node survey and the design decisions come
-first. Nothing is installed on the cluster yet. The project tracker is kept as a
-Claude artifact; its source is [`docs/PROJECT-STATUS.html`](docs/PROJECT-STATUS.html).
+first. Nothing is installed on the cluster yet. Project status, decisions and
+test matrices are tracked in a private Claude artifact. Its source,
+`docs/private/`, is git-ignored because it records enclave access detail.
 
 ## Layout
 
@@ -21,7 +22,7 @@ scripts/  mc1-slurm-presurvey        read-only pre-install survey (wrapper)
           lib/presurvey-remote.sh    survey body executed on each host
 man/      man1/                      man pages
 config/   (cluster inventory and Slurm settings, YAML; to come)
-docs/     PROJECT-STATUS.html        tracker source
+docs/     private/                   tracker source (git-ignored)
 results/  survey output (git-ignored: contains enclave host detail)
 ```
 

@@ -22,3 +22,6 @@ secrets/
 # Editor / OS
 .DS_Store
 *.swp
+
+# Private tracker source (holds enclave access posture); published only as a private artifact
+docs/private/
