@@ -1,0 +1,99 @@
+---
+# Accounting: MariaDB (local socket only) + slurmdbd on the controller.
+# The database password is generated here once and stays on this host.
+
+- name: MariaDB server
+  ansible.builtin.dnf:
+    name: mariadb-server
+    state: present
+    disablerepo: "{{ mc1_dnf_disablerepo }}"
+
+- name: MariaDB tuning for slurmdbd (SchedMD recommendations), loopback only
+  ansible.builtin.template:
+    src: mariadb-slurmdbd.cnf.j2
+    dest: /etc/my.cnf.d/mariadb-slurmdbd.cnf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart mariadb
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: MariaDB service
+  ansible.builtin.systemd:
+    name: mariadb
+    enabled: true
+    state: started
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: Apply MariaDB config changes before creating the database
+  ansible.builtin.meta: flush_handlers
+
+- name: Generate the slurmdbd database password once
+  ansible.builtin.shell: |
+    set -euo pipefail
+    umask 077
+    openssl rand -hex 24 > {{ slurmdbd_password_file }}
+  args:
+    creates: "{{ slurmdbd_password_file }}"
+    executable: /bin/bash
+  no_log: true
+
+- name: Read the slurmdbd database password
+  ansible.builtin.slurp:
+    src: "{{ slurmdbd_password_file }}"
+  register: slurmdbd_pw_b64
+  no_log: true
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: Keep the password as a fact for the templates
+  ansible.builtin.set_fact:
+    slurmdbd_db_password: "{{ (slurmdbd_pw_b64.content | default('') | b64decode | trim) or 'CHECK-MODE-PLACEHOLDER' }}"
+  no_log: true
+
+- name: Does the accounting database exist?
+  ansible.builtin.command: >-
+    mysql --protocol=socket -u root -N -B -e
+    "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name='{{ slurmdbd_storage_loc }}'"
+  register: slurmdbd_db_exists
+  changed_when: false
+  check_mode: false
+  failed_when: false
+
+- name: Create the database and the slurm@localhost user; (re)apply password and grant
+  ansible.builtin.command: mysql --protocol=socket -u root
+  args:
+    stdin: |
+      CREATE DATABASE IF NOT EXISTS `{{ slurmdbd_storage_loc }}`;
+      CREATE USER IF NOT EXISTS 'slurm'@'localhost' IDENTIFIED BY '{{ slurmdbd_db_password }}';
+      ALTER USER 'slurm'@'localhost' IDENTIFIED BY '{{ slurmdbd_db_password }}';
+      GRANT ALL ON `{{ slurmdbd_storage_loc }}`.* TO 'slurm'@'localhost';
+  changed_when: slurmdbd_db_exists.stdout | default('0') | trim == '0'
+  no_log: true
+
+- name: slurmdbd.conf (contains the password; slurm-only)
+  ansible.builtin.template:
+    src: slurmdbd.conf.j2
+    dest: /etc/slurm/slurmdbd.conf
+    owner: slurm
+    group: slurm
+    mode: "0600"
+  no_log: true
+  notify: Restart slurmdbd
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: slurmdbd service
+  ansible.builtin.systemd:
+    name: slurmdbd
+    enabled: true
+    state: started
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: Apply slurmdbd changes before slurmctld starts
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for slurmdbd to listen
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ slurm_ports.slurmdbd }}"
+    timeout: 60
+  when: not ansible_check_mode

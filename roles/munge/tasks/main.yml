@@ -1,0 +1,81 @@
+---
+# MUNGE: one shared key, generated on the controller and copied byte-exact to
+# every other node. The key travels base64-encoded inside the Ansible run
+# (slurp on the controller, base64 -d on the target) and is never written to
+# the operator's machine or logged.
+
+- name: munge packages
+  ansible.builtin.dnf:
+    name: [munge, munge-libs]
+    state: present
+    disablerepo: "{{ mc1_dnf_disablerepo }}"
+
+- name: Generate the munge key on the controller if it has none
+  ansible.builtin.shell: |
+    set -euo pipefail
+    umask 077
+    dd if=/dev/urandom of=/etc/munge/munge.key bs=1024 count=1 status=none
+    chown munge:munge /etc/munge/munge.key
+    chmod 0400 /etc/munge/munge.key
+  args:
+    creates: /etc/munge/munge.key
+    executable: /bin/bash
+  delegate_to: "{{ slurm_controller_fqdn }}"
+  run_once: true
+  notify: Restart munge
+
+- name: Checksum the controller key
+  ansible.builtin.stat:
+    path: /etc/munge/munge.key
+    checksum_algorithm: sha256
+  register: munge_ref
+  delegate_to: "{{ slurm_controller_fqdn }}"
+  run_once: true
+
+- name: Read the controller key
+  ansible.builtin.slurp:
+    src: /etc/munge/munge.key
+  register: munge_key_b64
+  delegate_to: "{{ slurm_controller_fqdn }}"
+  run_once: true
+  no_log: true
+  ignore_errors: "{{ ansible_check_mode }}"   # absent until the first real run
+
+- name: Checksum the local key
+  ansible.builtin.stat:
+    path: /etc/munge/munge.key
+    checksum_algorithm: sha256
+  register: munge_local
+
+- name: Install the controller key on this node
+  ansible.builtin.shell: |
+    set -euo pipefail
+    umask 077
+    base64 -d > /etc/munge/munge.key.new
+    chown munge:munge /etc/munge/munge.key.new
+    chmod 0400 /etc/munge/munge.key.new
+    mv -f /etc/munge/munge.key.new /etc/munge/munge.key
+  args:
+    stdin: "{{ munge_key_b64.content | default('') }}"
+    executable: /bin/bash
+  when:
+    - inventory_hostname != slurm_controller_fqdn
+    - munge_ref.stat.exists
+    - not munge_local.stat.exists or munge_local.stat.checksum != munge_ref.stat.checksum
+  no_log: true
+  notify: Restart munge
+
+- name: Key ownership and mode
+  ansible.builtin.file:
+    path: /etc/munge/munge.key
+    owner: munge
+    group: munge
+    mode: "0400"
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: munge service
+  ansible.builtin.systemd:
+    name: munge
+    enabled: true
+    state: started
+  ignore_errors: "{{ ansible_check_mode }}"

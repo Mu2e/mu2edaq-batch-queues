@@ -1,0 +1,6 @@
+---
+- name: Restart slurmd
+  ansible.builtin.systemd:
+    name: slurmd
+    state: restarted
+  ignore_errors: "{{ ansible_check_mode }}"

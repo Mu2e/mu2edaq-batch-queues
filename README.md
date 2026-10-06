@@ -2,44 +2,62 @@
 
 Slurm batch queues for the Mu2e **MC1 trigger worker cluster**: the
 `mu2e-mc1-worker-NN` nodes inside the DAQ enclave, reached by ProxyJump through
-`g2gateway01`.
+`g2gateway01`. Deployed with Ansible from an operator workstation.
 
 | Role | Host |
 |------|------|
-| Controller (`slurmctld`) and submit node | `mu2e-mc1-worker-01.fnal.gov` |
-| Compute nodes (`slurmd`) | `mu2e-mc1-worker-02 … -NN.fnal.gov` |
+| Controller (`slurmctld`, `slurmdbd`, MariaDB) and submit node | `mu2e-mc1-worker-01.fnal.gov` |
+| Compute nodes (`slurmd`) | `mu2e-mc1-worker-02`, `-03`; `-04 … -16` declared `State=FUTURE` |
 | Ingress / ProxyJump | `mu2eshift@g2gateway01.fnal.gov` |
 
-**Status:** pre-install. The read-only node survey and the design decisions come
-first. Nothing is installed on the cluster yet. Project status, decisions and
-test matrices are tracked in a private Claude artifact. Its source,
-`docs/private/`, is git-ignored because it records enclave access detail.
+**Status:** the deployer is written and tested offline. Nothing is installed on
+the cluster yet. Project status, decisions and test matrices are tracked in a
+private Claude artifact. Its source, `docs/private/`, is git-ignored because it
+records enclave access detail.
+
+## Quick start
+
+```sh
+./bootstrap.sh                               # venv, ansible-core, ansible.posix
+klist                                        # Kerberos ticket for GSSAPI ssh
+scripts/mc1-slurm-deploy preflight           # read-only checks on every node
+scripts/mc1-slurm-deploy deploy              # dry run: --check --diff
+scripts/mc1-slurm-deploy deploy --apply      # install
+scripts/mc1-slurm-deploy validate            # test jobs -> results/validate-<UTC>.json
+```
+
+Before the first deploy, set `uid` for `mu2ebatch` in
+`config/group_vars/all.yml`. See [docs/INSTALL.md](docs/INSTALL.md).
 
 ## Layout
 
 ```
-scripts/  mc1-slurm-presurvey        read-only pre-install survey (wrapper)
-          lib/presurvey-remote.sh    survey body executed on each host
-man/      man1/                      man pages
-config/   (cluster inventory and Slurm settings, YAML; to come)
-docs/     private/                   tracker source (git-ignored)
-results/  survey output (git-ignored: contains enclave host detail)
+config/   inventory.yml              controller and compute groups
+          group_vars/all.yml         every setting (accounts, ports, partitions, slurmdbd)
+playbooks/ preflight.yml site.yml validate.yml
+roles/    preflight accounts munge slurm_common firewall slurmdbd slurmctld slurmd
+scripts/  mc1-slurm-deploy           wrapper: CLI > env > .env > config overrides
+          mc1-slurm-presurvey        read-only host survey over ssh
+man/      man1/                      man pages for every script
+docs/     DESIGN.md INSTALL.md       design decisions; install and operations
+tests/    pytest: templates rendered by real Ansible, config consistency, wrapper
+results/  survey and validation output (git-ignored)
 ```
 
-## Pre-install survey
-
-Requires a Kerberos ticket and an ssh client with GSSAPI.
+## Tests
 
 ```sh
-klist
-scripts/mc1-slurm-presurvey              # workers 01-03 as root, via mu2eshift@g2gateway01
-scripts/mc1-slurm-presurvey --gateway    # the gateway itself
-scripts/mc1-slurm-presurvey -n           # print the ssh commands only
-man man/man1/mc1-slurm-presurvey.1
+venv/bin/python -m pytest -q tests
 ```
+
+The tests run offline. They render every template through Ansible on
+localhost, syntax-check the playbooks, check the config for consistency, and
+test the wrapper's override precedence. They have been verified with Python
+3.9 + ansible-core 2.15 and Python 3.12 + ansible-core 2.18.
 
 ## Repository policy
 
 This repository is public. Never commit the munge key or a Slurm auth key,
-database credentials, or survey output. `.gitignore` covers `*.key`, `.env`,
-`config/*.local.yaml`, `secrets/` and `results/`.
+database credentials, survey output, or the enclave's access-control posture.
+`.gitignore` covers `*.key`, `.env`, `config/*.local.yaml`, `secrets/`,
+`results/` and `docs/private/`.

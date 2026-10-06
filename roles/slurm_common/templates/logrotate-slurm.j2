@@ -1,0 +1,16 @@
+# {{ ansible_managed }}
+{{ slurm_log_dir }}/*.log {
+    weekly
+    rotate 8
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 slurm slurm
+    sharedscripts
+    postrotate
+        pkill -x --signal SIGUSR2 slurmctld 2>/dev/null || true
+        pkill -x --signal SIGUSR2 slurmdbd 2>/dev/null || true
+        pkill -x --signal SIGUSR2 slurmd 2>/dev/null || true
+    endscript
+}

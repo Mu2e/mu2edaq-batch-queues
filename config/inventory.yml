@@ -1,0 +1,23 @@
+# MC1 Slurm inventory.
+#
+# slurm_controller : slurmctld + slurmdbd + MariaDB + job submission (no slurmd)
+# slurm_compute    : slurmd
+#
+# Workers that are not yet online are NOT listed here. They are declared to
+# Slurm as State=FUTURE through slurm_future_nodelist (group_vars/all.yml).
+# To bring one online: add it under slurm_compute, shrink
+# slurm_future_nodelist, and re-run the deploy.
+all:
+  vars:
+    ansible_user: "{{ mc1_ssh_user }}"
+    ansible_ssh_common_args: "-o ProxyJump={{ mc1_jump }}"
+  children:
+    slurm_cluster:
+      children:
+        slurm_controller:
+          hosts:
+            mu2e-mc1-worker-01.fnal.gov:
+        slurm_compute:
+          hosts:
+            mu2e-mc1-worker-02.fnal.gov:
+            mu2e-mc1-worker-03.fnal.gov:

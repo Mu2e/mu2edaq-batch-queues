@@ -1,0 +1,64 @@
+---
+# Test harness: renders every template with the real Ansible Jinja
+# environment on localhost, using the project's inventory and group_vars plus
+# fake facts. Nothing contacts the cluster.
+#   ansible-playbook tests/render.yml -i config/inventory.yml -e out_dir=/tmp/x
+- name: Render templates offline
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    roles_dir: "{{ playbook_dir }}/../roles"
+    slurmdbd_db_password: test-password
+    slurm_compute_nodes:
+      - {name: mu2e-mc1-worker-02, addr: mu2e-mc1-worker-02.fnal.gov, sockets: 2, cores_per_socket: 16, threads_per_core: 2, real_memory: 254000}
+      - {name: mu2e-mc1-worker-03, addr: mu2e-mc1-worker-03.fnal.gov, sockets: 2, cores_per_socket: 16, threads_per_core: 2, real_memory: 254000}
+    # Fake registered results for the validation template.
+    v_stamp: 20261006T000000Z
+    v_user: mu2ebatch
+    v_nodes: [mu2e-mc1-worker-02, mu2e-mc1-worker-03]
+    v_ping: {rc: 0, stdout: "Slurmctld(primary) at mu2e-mc1-worker-01 is UP"}
+    v_sinfo: {stdout_lines: ["mu2e-mc1-worker-02 idle", "mu2e-mc1-worker-03 down*"]}
+    v_unmunge: {results: [{rc: 0}, {rc: 1}]}
+    v_srun:
+      results:
+        - {item: mu2e-mc1-worker-02, rc: 0, stdout: "mu2e-mc1-worker-02"}
+        - {item: mu2e-mc1-worker-03, rc: 1, stdout: ""}
+    v_sbatch:
+      results:
+        - {item: mu2e-mc1-worker-02, rc: 0, stdout: "17"}
+        - {item: mu2e-mc1-worker-03, rc: 1, stdout: ""}
+    v_oom:
+      results:
+        - {item: mu2e-mc1-worker-02, rc: 137, stderr: "slurmstepd: error: Detected 1 oom_kill event in StepId=18.0"}
+        - {item: mu2e-mc1-worker-03, rc: 0, stderr: ""}
+    v_multi: {rc: 1, stdout_lines: ["mu2e-mc1-worker-02"]}
+    v_sacct: {stdout_lines: ["17|COMPLETED"]}
+  tasks:
+    - name: Output directory
+      ansible.builtin.file:
+        path: "{{ out_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Render role templates
+      ansible.builtin.template:
+        src: "{{ roles_dir }}/{{ item.src }}"
+        dest: "{{ out_dir }}/{{ item.dest }}"
+        mode: "0644"
+      loop:
+        - {src: slurmctld/templates/slurm.conf.j2, dest: slurm.conf}
+        - {src: slurmctld/templates/cgroup.conf.j2, dest: cgroup.conf}
+        - {src: slurmdbd/templates/slurmdbd.conf.j2, dest: slurmdbd.conf}
+        - {src: slurmdbd/templates/mariadb-slurmdbd.cnf.j2, dest: mariadb-slurmdbd.cnf}
+        - {src: slurmd/templates/sysconfig-slurmd.j2, dest: sysconfig-slurmd}
+        - {src: slurm_common/templates/logrotate-slurm.j2, dest: logrotate-slurm}
+
+    - name: Render the validation results template
+      ansible.builtin.copy:
+        content: "{{ (v_raw if v_raw is mapping else (v_raw | from_json)) | to_nice_json }}"
+        dest: "{{ out_dir }}/validate-results.json"
+        mode: "0644"
+      vars:
+        v_raw: "{{ lookup('ansible.builtin.template', playbook_dir ~ '/../playbooks/templates/validate-results.json.j2') }}"

@@ -1,0 +1,7 @@
+# Ansible control-node dependencies. ansible-core 2.15 is the last line that
+# runs on a Python 3.9 controller; 2.17 needs 3.10+, 2.18 needs 3.11+. The
+# playbooks avoid features newer than 2.15.
+ansible-core>=2.15,<2.16; python_version < "3.10"
+ansible-core>=2.17,<2.19; python_version >= "3.10"
+PyYAML>=5.4
+Jinja2>=3.0

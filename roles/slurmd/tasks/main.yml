@@ -1,0 +1,22 @@
+---
+# slurmd on compute nodes, configless: the unit reads SLURMD_OPTIONS from
+# /etc/sysconfig/slurmd and fetches slurm.conf/cgroup.conf from slurmctld.
+
+- name: slurmd options (configless --conf-server)
+  ansible.builtin.template:
+    src: sysconfig-slurmd.j2
+    dest: /etc/sysconfig/slurmd
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart slurmd
+
+- name: slurmd service
+  ansible.builtin.systemd:
+    name: slurmd
+    enabled: true
+    state: started
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: Apply slurmd changes
+  ansible.builtin.meta: flush_handlers

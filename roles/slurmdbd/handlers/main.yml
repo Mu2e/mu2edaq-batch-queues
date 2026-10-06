@@ -1,0 +1,12 @@
+---
+- name: Restart mariadb
+  ansible.builtin.systemd:
+    name: mariadb
+    state: restarted
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: Restart slurmdbd
+  ansible.builtin.systemd:
+    name: slurmdbd
+    state: restarted
+  ignore_errors: "{{ ansible_check_mode }}"

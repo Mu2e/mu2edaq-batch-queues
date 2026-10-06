@@ -1,0 +1,17 @@
+---
+# Restart (not just reconfigure) so node additions take effect on every Slurm
+# version; slurmctld keeps queued and running jobs in StateSaveLocation.
+- name: Restart slurmctld
+  ansible.builtin.systemd:
+    name: slurmctld
+    state: restarted
+  ignore_errors: "{{ ansible_check_mode }}"
+
+# Makes running slurmd daemons fetch the new configless config.
+- name: Reconfigure slurm
+  ansible.builtin.command: scontrol reconfigure
+  register: reconf
+  retries: 5
+  delay: 3
+  until: reconf.rc == 0
+  when: not ansible_check_mode

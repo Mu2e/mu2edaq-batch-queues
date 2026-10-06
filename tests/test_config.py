@@ -1,0 +1,78 @@
+"""Consistency of config/inventory.yml and config/group_vars/all.yml."""
+
+import re
+
+import pytest
+import yaml
+
+from conftest import ROOT
+
+
+@pytest.fixture(scope="module")
+def inventory():
+    return yaml.safe_load((ROOT / "config" / "inventory.yml").read_text())
+
+
+@pytest.fixture(scope="module")
+def cfg():
+    return yaml.safe_load((ROOT / "config" / "group_vars" / "all.yml").read_text())
+
+
+def hosts(inv, group):
+    groups = inv["all"]["children"]["slurm_cluster"]["children"]
+    return list((groups[group].get("hosts") or {}).keys())
+
+
+def test_single_controller_is_worker_01(inventory):
+    assert hosts(inventory, "slurm_controller") == ["mu2e-mc1-worker-01.fnal.gov"]
+
+
+def test_controller_is_not_compute(inventory):
+    assert not set(hosts(inventory, "slurm_controller")) & set(hosts(inventory, "slurm_compute"))
+
+
+def test_jump_is_mu2eshift_on_g2gateway01(cfg):
+    assert cfg["mc1_jump"] == "mu2eshift@g2gateway01.fnal.gov"
+
+
+def test_service_accounts(cfg):
+    names = [a["name"] for a in cfg["mc1_service_accounts"]]
+    assert sorted(names) == ["munge", "slurm"]
+    uids = [a["uid"] for a in cfg["mc1_service_accounts"]]
+    gids = [a["gid"] for a in cfg["mc1_service_accounts"]]
+    assert len(set(uids)) == len(uids)
+    assert len(set(gids)) == len(gids)
+    assert all(200 <= u < 1000 for u in uids), "service accounts belong in the EL9 system range"
+
+
+def test_job_accounts(cfg):
+    accts = {a["name"]: a for a in cfg["mc1_job_accounts"]}
+    assert set(accts) == {"mu2ebatch", "mu2eshift", "mu2edaq"}
+    assert accts["mu2ebatch"]["create"] is True
+    assert accts["mu2eshift"]["create"] is False and accts["mu2edaq"]["create"] is False
+    new_uids = [a["uid"] for a in accts.values() if a["create"] and a["uid"] is not None]
+    svc_uids = [a["uid"] for a in cfg["mc1_service_accounts"]]
+    assert not set(new_uids) & set(svc_uids)
+
+
+def expand(hostlist):
+    """Expand a single-bracket Slurm hostlist like name-[04-16]."""
+    m = re.fullmatch(r"(.*)\[(\d+)-(\d+)\]", hostlist)
+    if not m:
+        return [hostlist]
+    prefix, lo, hi = m.group(1), m.group(2), m.group(3)
+    return ["%s%0*d" % (prefix, len(lo), n) for n in range(int(lo), int(hi) + 1)]
+
+
+def test_future_nodes_disjoint_from_inventory(inventory, cfg):
+    future = set(expand(cfg["slurm_future_nodelist"]))
+    live = {h.split(".")[0] for g in ("slurm_controller", "slurm_compute") for h in hosts(inventory, g)}
+    assert future, "future nodelist should expand"
+    assert not future & live
+
+
+def test_ports_distinct(cfg):
+    ports = cfg["slurm_ports"]
+    assert len(set(ports.values())) == 3
+    lo, hi = (int(x) for x in cfg["slurm_srun_port_range"].split("-"))
+    assert lo < hi and not any(lo <= p <= hi for p in ports.values())

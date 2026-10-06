@@ -1,0 +1,6 @@
+---
+- name: Restart munge
+  ansible.builtin.systemd:
+    name: munge
+    state: restarted
+  ignore_errors: "{{ ansible_check_mode }}"

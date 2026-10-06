@@ -1,0 +1,107 @@
+# Main configuration for the MC1 Slurm deployment.
+#
+# Override order (highest wins): command line (mc1-slurm-deploy --set / options)
+# > environment (MC1_*) > .env > this file. The wrapper passes overrides to
+# ansible-playbook as extra vars, which outrank everything here.
+#
+# Secrets do not belong in this file: the munge key and the slurmdbd database
+# password are generated on the controller and never leave the cluster.
+
+# ---------------------------------------------------------------- access ----
+mc1_jump: mu2eshift@g2gateway01.fnal.gov   # ProxyJump hop into the enclave
+mc1_ssh_user: root                          # login on the workers
+mc1_dnf_disablerepo:                        # repos skipped by every dnf call
+  - libnvidia-container                     # metadata GPG check fails (2026-10-06)
+
+# ------------------------------------------------------------- preflight ----
+mc1_puppet_policy: fail        # fail | warn when a Puppet/OpenVox agent is active
+mc1_max_clock_offset_s: 1.0    # chrony offset limit; munge rejects skew > ~5 min
+
+# -------------------------------------------------------------- accounts ----
+# Service accounts: identical UID/GID on every node, created BEFORE the
+# packages so the RPM scriptlets reuse them instead of allocating dynamic IDs.
+# PROPOSED values: preflight fails if any is taken by a different name.
+mc1_service_accounts:
+  - name: munge
+    uid: 450
+    gid: 450
+    home: /var/lib/munge
+    comment: MUNGE authentication service
+  - name: slurm
+    uid: 451
+    gid: 451
+    home: /var/lib/slurm
+    comment: Slurm workload manager
+
+# Job accounts. Existing accounts are not created; their home ownership is
+# repaired when fix_home_ownership is true (worker homes were root:root 750
+# on 2026-10-02). New accounts need a uid chosen outside every range the
+# nodes could later receive from SSSD/LDAP; preflight refuses a null uid.
+mc1_job_accounts:
+  - name: mu2ebatch
+    create: true
+    uid: null                 # REQUIRED before deploy
+    group: mu2e               # existing group, gid 9914
+    home: /home/mu2ebatch
+    comment: Mu2e MC1 batch service account
+    k5login: []               # principals allowed to ssh in as mu2ebatch
+  - name: mu2eshift
+    create: false
+    fix_home_ownership: true
+  - name: mu2edaq
+    create: false
+    fix_home_ownership: true
+
+# ----------------------------------------------------------------- slurm ----
+slurm_controller_fqdn: "{{ groups['slurm_controller'][0] }}"   # derived; edit the inventory instead
+slurm_cluster_name: mc1
+slurm_min_version: "22.05"     # configless + cgroup/v2 need >= 22.05
+slurm_packages_controller: [slurm, slurm-slurmctld, slurm-slurmdbd]
+slurm_packages_compute: [slurm, slurm-slurmd]
+slurm_ports:
+  slurmctld: 6817
+  slurmd: 6818
+  slurmdbd: 6819
+slurm_srun_port_range: "60001-63000"   # srun on the submit node listens here
+slurm_state_save: /var/spool/slurm/ctld
+slurm_spool_dir: /var/spool/slurm/d
+slurm_log_dir: /var/log/slurm
+slurm_debug: info
+
+slurm_account: mu2e                    # sacctmgr account holding the job users
+slurm_accounting_enforce: associations,limits
+slurm_def_mem_per_cpu: 2000            # MB, when a job asks for no memory
+slurm_node_mem_reserve_mb: 2048        # kept back from RealMemory for the OS
+
+# Workers declared to Slurm but not yet online (Slurm hostlist syntax).
+slurm_future_nodelist: "mu2e-mc1-worker-[04-16]"
+# Hardware for FUTURE nodes; empty means "same as the first compute node".
+slurm_future_node_spec: {}
+
+# Per-host hardware overrides go in host_vars/<fqdn>.yml as slurm_node_spec,
+# e.g. {sockets: 2, cores_per_socket: 16, threads_per_core: 2, real_memory: 190000}.
+
+slurm_partitions:
+  - name: mc1
+    default: true
+    max_time: INFINITE
+    # nodes: omitted means every compute node plus the FUTURE nodes
+
+# --------------------------------------------------------------- slurmdbd ---
+slurmdbd_storage_loc: slurm_acct_db
+slurmdbd_password_file: /etc/slurm/.slurmdbd-db.pw   # generated on the controller
+slurmdbd_innodb_buffer_pool_size: 1G
+slurmdbd_purge:
+  PurgeEventAfter: 12months
+  PurgeJobAfter: 24months
+  PurgeResvAfter: 12months
+  PurgeStepAfter: 6months
+  PurgeSuspendAfter: 12months
+  PurgeTXNAfter: 12months
+  PurgeUsageAfter: 24months
+
+# --------------------------------------------------------------- firewall ---
+# Applied only where firewalld is active. Sources are the inventory nodes'
+# addresses; nothing outside the cluster is opened.
+mc1_manage_firewall: true
+mc1_cluster_addrs: []          # empty = inventory nodes' default IPv4 addresses

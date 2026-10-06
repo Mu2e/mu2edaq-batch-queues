@@ -1,0 +1,88 @@
+---
+# slurmctld on the controller. slurm.conf and cgroup.conf exist only here;
+# compute nodes fetch them from slurmctld (configless mode).
+
+- name: Build each compute node's Slurm hardware line from its gathered facts
+  ansible.builtin.set_fact:
+    slurm_compute_nodes: >-
+      {{ (slurm_compute_nodes | default([])) + [
+           {
+             'name': item.split('.')[0],
+             'addr': item,
+             'sockets': hostvars[item].ansible_facts.processor_count,
+             'cores_per_socket': hostvars[item].ansible_facts.processor_cores,
+             'threads_per_core': hostvars[item].ansible_facts.processor_threads_per_core,
+             'real_memory': (hostvars[item].ansible_facts.memtotal_mb | int) - (slurm_node_mem_reserve_mb | int)
+           } | combine(hostvars[item].slurm_node_spec | default({}))
+         ] }}
+  loop: "{{ groups['slurm_compute'] }}"
+
+- name: slurm.conf
+  ansible.builtin.template:
+    src: slurm.conf.j2
+    dest: /etc/slurm/slurm.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Restart slurmctld
+    - Reconfigure slurm
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: cgroup.conf
+  ansible.builtin.template:
+    src: cgroup.conf.j2
+    dest: /etc/slurm/cgroup.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Restart slurmctld
+    - Reconfigure slurm
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: slurmctld service
+  ansible.builtin.systemd:
+    name: slurmctld
+    enabled: true
+    state: started
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: Apply configuration changes
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for slurmctld to listen
+  ansible.builtin.wait_for:
+    host: "{{ slurm_controller_fqdn }}"
+    port: "{{ slurm_ports.slurmctld }}"
+    timeout: 60
+  when: not ansible_check_mode
+
+# ---- accounting associations: only listed job accounts may submit ---------
+
+- name: Existing sacctmgr accounts
+  ansible.builtin.command: sacctmgr -n -P list account format=account
+  register: sacct_accounts
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Create the job account in slurmdbd
+  ansible.builtin.command: >-
+    sacctmgr -i add account {{ slurm_account }}
+    Description="Mu2e MC1 batch" Organization=mu2e
+  when:
+    - not ansible_check_mode
+    - slurm_account not in sacct_accounts.stdout_lines
+
+- name: Existing sacctmgr user associations
+  ansible.builtin.command: sacctmgr -n -P list assoc account={{ slurm_account }} format=user
+  register: sacct_users
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Associate the job users with the account
+  ansible.builtin.command: sacctmgr -i add user {{ item }} account={{ slurm_account }}
+  loop: "{{ mc1_job_accounts | map(attribute='name') | list }}"
+  when:
+    - not ansible_check_mode
+    - item not in sacct_users.stdout_lines

@@ -25,3 +25,6 @@ secrets/
 
 # Private tracker source (holds enclave access posture); published only as a private artifact
 docs/private/
+
+# Ansible Galaxy collections (installed by bootstrap.sh)
+collections/

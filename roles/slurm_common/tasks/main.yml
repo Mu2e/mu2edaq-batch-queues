@@ -1,0 +1,49 @@
+---
+# Packages and directories shared by controller and compute nodes.
+
+- name: Slurm packages for this node's role
+  ansible.builtin.dnf:
+    name: >-
+      {{ slurm_packages_controller if inventory_hostname in groups['slurm_controller']
+         else slurm_packages_compute }}
+    state: present
+    disablerepo: "{{ mc1_dnf_disablerepo }}"
+
+- name: Common Slurm directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: /etc/slurm, owner: root, group: root, mode: "0755"}
+    - {path: "{{ slurm_log_dir }}", owner: slurm, group: slurm, mode: "0750"}
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Controller state directory
+  ansible.builtin.file:
+    path: "{{ slurm_state_save }}"
+    state: directory
+    owner: slurm
+    group: slurm
+    mode: "0700"
+  when: inventory_hostname in groups['slurm_controller']
+
+- name: Compute spool directory
+  ansible.builtin.file:
+    path: "{{ slurm_spool_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: inventory_hostname in groups['slurm_compute']
+
+- name: Log rotation (SIGUSR2 makes the daemons reopen their logs)
+  ansible.builtin.template:
+    src: logrotate-slurm.j2
+    dest: /etc/logrotate.d/mc1-slurm
+    owner: root
+    group: root
+    mode: "0644"

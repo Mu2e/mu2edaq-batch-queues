@@ -1,0 +1,161 @@
+.TH MC1-SLURM-DEPLOY 1 "2026-10-06" "mu2edaq-batch-queues" "Mu2e DAQ Tools"
+.SH NAME
+mc1-slurm-deploy \- install, check and validate Slurm on the Mu2e MC1 trigger cluster
+.SH SYNOPSIS
+.B mc1-slurm-deploy
+.RB { preflight | deploy | validate }
+.RB [ \-\-apply ]
+.RB [ \-\-limit
+.IR pattern ]
+.RB [ \-\-tags
+.IR tags ]
+.RB [ \-\-jump
+.IR user@host ]
+.RB [ \-\-ssh\-user
+.IR user ]
+.RB [ \-\-puppet\-policy
+.RB { fail | warn }]
+.RB [ \-\-set
+.IR key=value ]...
+.RB [ \-\-env\-file
+.IR path ]
+.RB [ \-\-print ]
+.RB [ \-v ...]
+.SH DESCRIPTION
+.B mc1-slurm-deploy
+runs this repository's Ansible playbooks against the hosts in
+.IR config/inventory.yml .
+Every connection goes through the ProxyJump hop
+.RB ( mu2eshift@g2gateway01.fnal.gov
+by default) and logs in to the workers as
+.BR root .
+.TP
+.B preflight
+Read-only. Checks the OS, short hostname, cgroup v2, chrony offset, Puppet
+agent state, the configured UIDs and GIDs, the presence of the job accounts,
+the Slurm version the repositories offer, and compute-to-controller
+reachability. It also prints each node's CPU and memory layout.
+.TP
+.B deploy
+Runs preflight, then creates the accounts and installs MUNGE (one key,
+generated on the controller), Slurm, MariaDB and slurmdbd, and the firewalld
+rules. It starts slurmctld on the controller and slurmd on the compute nodes,
+and registers the job users with slurmdbd. Without
+.B \-\-apply
+it runs with
+.B \-\-check \-\-diff
+and changes nothing. On nodes where Slurm is not yet installed, the dry run
+cannot show steps that depend on files the packages would create; those tasks
+are reported as ignored errors.
+.TP
+.B validate
+Runs test jobs as the first new job account: scontrol ping, node state,
+a MUNGE round trip, srun and sbatch on every compute node, cgroup memory
+enforcement, a multi-node step, and sacct records. It writes
+.IR results/validate-<UTC>.json .
+.SH OPTIONS
+.TP
+.B \-\-apply
+deploy only: make changes.
+.TP
+.BI \-\-limit " pattern"
+Restrict the run to an Ansible host pattern, e.g.
+.BR slurm_compute .
+Firewall sources are computed from the facts of all cluster nodes, so a
+limited deploy should set
+.B mc1_cluster_addrs
+explicitly.
+.TP
+.BI \-\-tags " tags"
+Run only tasks with these Ansible tags.
+.TP
+.BI \-\-jump " user@host"
+ProxyJump hop (variable
+.BR mc1_jump ).
+.TP
+.BI \-\-ssh\-user " user"
+Login on the workers (variable
+.BR mc1_ssh_user ).
+.TP
+.BR \-\-puppet\-policy " " fail | warn
+What preflight does when puppet.service is running (variable
+.BR mc1_puppet_policy ).
+.TP
+.BI \-\-set " key=value"
+Override any variable in
+.IR config/group_vars/all.yml .
+Values are typed as YAML. Repeatable.
+.TP
+.BI \-\-env\-file " path"
+dotenv file read below the environment (default
+.IR .env
+in the repository root).
+.TP
+.B \-\-print
+Print the ansible-playbook command and the merged overrides; run nothing.
+.TP
+.B \-v
+Pass verbosity to ansible-playbook; repeat up to four times.
+.SH CONFIGURATION
+Precedence, highest first: command line, environment, .env,
+.IR config/group_vars/all.yml .
+The overrides are handed to Ansible as extra variables.
+.SH ENVIRONMENT
+.TP
+.B MC1_JUMP
+ProxyJump hop.
+.TP
+.B MC1_SSH_USER
+Login on the workers.
+.TP
+.B MC1_PUPPET_POLICY
+fail or warn.
+.TP
+.B MC1_SET
+Semicolon-separated
+.I key=value
+overrides, e.g.
+.BR "MC1_SET='slurm_debug=debug;slurm_def_mem_per_cpu=4000'" .
+.SH FILES
+.TP
+.I config/inventory.yml
+Controller and compute node groups.
+.TP
+.I config/group_vars/all.yml
+All settings: accounts and UIDs, ports, partitions, FUTURE nodes, slurmdbd.
+.TP
+.I results/
+Validation output (git-ignored).
+.SH EXAMPLES
+.nf
+klist
+\&./bootstrap.sh
+scripts/mc1-slurm-deploy preflight
+scripts/mc1-slurm-deploy deploy                     # dry run with diffs
+scripts/mc1-slurm-deploy deploy \-\-apply
+scripts/mc1-slurm-deploy validate
+scripts/mc1-slurm-deploy deploy \-\-set mc1_job_accounts=... \-\-print
+.fi
+.SH NOTES
+Secrets never leave the cluster. The MUNGE key is generated on the controller
+and copied to the compute nodes inside the Ansible run (base64 over the
+existing ssh channel, not logged). The slurmdbd database password is generated
+in
+.I /etc/slurm/.slurmdbd-db.pw
+on the controller.
+.PP
+Claude Code's auto-mode classifier treats these logins as production access.
+Run the tool from your own shell, or with the
+.B !
+prefix inside a session.
+.SH EXIT STATUS
+The exit status of ansible-playbook. 1 if it is not installed; 2 for a
+malformed
+.BR \-\-set .
+.SH SEE ALSO
+.BR mc1-slurm-presurvey (1),
+.BR ansible-playbook (1),
+.BR slurm.conf (5),
+.BR slurmdbd.conf (5),
+.BR cgroup.conf (5),
+.BR munge (7)

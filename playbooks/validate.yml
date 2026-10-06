@@ -1,0 +1,104 @@
+---
+# Post-install validation. Runs small test jobs as the first new job account
+# (mu2ebatch by default) and writes the results, keyed like the tracker's test
+# matrix, to results/validate-<UTC>.json on the operator machine.
+- name: Validate the MC1 Slurm cluster
+  hosts: slurm_controller
+  gather_facts: false
+  vars:
+    v_user: "{{ (mc1_job_accounts | selectattr('create') | map(attribute='name') | list + mc1_job_accounts | map(attribute='name') | list) | first }}"
+    v_nodes: "{{ groups['slurm_compute'] | map('regex_replace', '\\..*$', '') | list }}"
+  tasks:
+    - name: Fix the run timestamp once (a play var would re-evaluate per use)
+      ansible.builtin.set_fact:
+        v_stamp: "{{ lookup('ansible.builtin.pipe', 'date -u +%Y%m%dT%H%M%SZ') }}"
+
+    - name: Controller answers (scontrol ping)
+      ansible.builtin.command: scontrol ping
+      register: v_ping
+      changed_when: false
+      failed_when: false
+
+    - name: Node states (sinfo)
+      ansible.builtin.command: sinfo -h -N -o "%N %T"
+      register: v_sinfo
+      changed_when: false
+      failed_when: false
+
+    - name: MUNGE credential from the controller
+      ansible.builtin.command: munge -n
+      register: v_cred
+      changed_when: false
+      failed_when: false
+
+    - name: MUNGE credential decodes on each compute node
+      ansible.builtin.command: unmunge
+      args:
+        stdin: "{{ v_cred.stdout }}"
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['slurm_compute'] }}"
+      register: v_unmunge
+      changed_when: false
+      failed_when: false
+
+    - name: srun hostname on each compute node
+      ansible.builtin.command: >-
+        runuser -u {{ v_user }} -- srun -N1 -w {{ item }} -D /tmp --time=1 hostname -s
+      loop: "{{ v_nodes }}"
+      register: v_srun
+      changed_when: false
+      failed_when: false
+
+    - name: sbatch --wait on each compute node
+      ansible.builtin.command: >-
+        runuser -u {{ v_user }} -- sbatch --wait --parsable -w {{ item }} -D /tmp --time=1
+        -o /tmp/mc1-validate-%j.out --wrap "hostname -s; id -un"
+      loop: "{{ v_nodes }}"
+      register: v_sbatch
+      changed_when: false
+      failed_when: false
+
+    - name: Memory limit is enforced (64M job allocating 512M must fail)
+      ansible.builtin.command: >-
+        runuser -u {{ v_user }} -- srun -N1 -w {{ item }} -D /tmp --time=1 --mem=64M
+        python3 -c "b = bytearray(512 * 1024 * 1024); b[::4096] = b'x' * len(b[::4096])"
+      loop: "{{ v_nodes }}"
+      register: v_oom
+      changed_when: false
+      failed_when: false
+
+    - name: Multi-node step (slurmd to slurmd)
+      ansible.builtin.command: >-
+        runuser -u {{ v_user }} -- srun -N{{ v_nodes | length }} -D /tmp --time=1 hostname -s
+      register: v_multi
+      changed_when: false
+      failed_when: false
+      when: v_nodes | length > 1
+
+    - name: Accounting records for the sbatch jobs
+      ansible.builtin.command: >-
+        sacct -n -P -X -o JobID,State -j {{ v_sbatch.results | map(attribute='stdout') | select | join(',') }}
+      register: v_sacct
+      changed_when: false
+      failed_when: false
+      when: v_sbatch.results | map(attribute='stdout') | select | list | length > 0
+
+    - name: Assemble results (playbooks/templates/validate-results.json.j2)
+      ansible.builtin.set_fact:
+        # The template lookup returns parsed data on some ansible-core versions
+        # (convert_data) and a JSON string on others; accept both.
+        v_results: "{{ v_raw if v_raw is mapping else (v_raw | from_json) }}"
+      vars:
+        v_raw: "{{ lookup('ansible.builtin.template', 'validate-results.json.j2') }}"
+
+    - name: Write results/validate-<UTC>.json on the operator machine
+      ansible.builtin.copy:
+        content: "{{ v_results | to_nice_json }}\n"
+        dest: "{{ playbook_dir }}/../results/validate-{{ v_stamp }}.json"
+        mode: "0644"
+      delegate_to: localhost
+      become: false
+
+    - name: Summary
+      ansible.builtin.debug:
+        var: v_results.checks

@@ -1,0 +1,194 @@
+#!/usr/bin/env python3
+"""mc1-slurm-deploy - run the MC1 Slurm Ansible playbooks with layered overrides.
+
+Actions:
+  preflight   read-only checks on every cluster node
+  deploy      full installation; --check --diff unless --apply is given
+  validate    post-install test jobs; writes results/validate-<UTC>.json
+
+Override order (highest wins): command line > environment (MC1_*) > .env >
+config/group_vars/all.yml. Overrides reach Ansible as extra vars, which outrank
+every inventory and group variable.
+
+Python 3.9 compatible; standard library plus PyYAML (installed by bootstrap.sh).
+"""
+
+import argparse
+import json
+import os
+import shlex
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+from typing import Dict, List, Mapping, Optional
+
+ROOT = Path(__file__).resolve().parent.parent
+PLAYBOOKS = {
+    "preflight": "playbooks/preflight.yml",
+    "deploy": "playbooks/site.yml",
+    "validate": "playbooks/validate.yml",
+}
+# Environment variables with a dedicated Ansible variable.
+ENV_VARS = {
+    "MC1_JUMP": "mc1_jump",
+    "MC1_SSH_USER": "mc1_ssh_user",
+    "MC1_PUPPET_POLICY": "mc1_puppet_policy",
+}
+# Free-form overrides: MC1_SET="key=value;key2=value2".
+ENV_SET = "MC1_SET"
+
+
+def parse_value(text: str):
+    """Type a scalar override the way YAML would (numbers, booleans, null, lists)."""
+    try:
+        import yaml  # deferred: --help works without PyYAML
+    except ImportError:
+        return text
+    try:
+        return yaml.safe_load(text)
+    except yaml.YAMLError:
+        return text
+
+
+def parse_assignments(items: List[str]) -> Dict[str, object]:
+    out: Dict[str, object] = {}
+    for item in items:
+        item = item.strip()
+        if not item:
+            continue
+        if "=" not in item:
+            raise ValueError("override %r is not key=value" % item)
+        key, value = item.split("=", 1)
+        out[key.strip()] = parse_value(value.strip())
+    return out
+
+
+def parse_dotenv(path: Path) -> Dict[str, str]:
+    """Minimal .env reader: KEY=VALUE lines, optional 'export', quotes stripped."""
+    values: Dict[str, str] = {}
+    if not path.is_file():
+        return values
+    for raw in path.read_text().splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export "):].lstrip()
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        values[key.strip()] = value
+    return values
+
+
+def env_layer(env: Mapping[str, str]) -> Dict[str, object]:
+    """Ansible variables contributed by one environment-like mapping."""
+    out: Dict[str, object] = {}
+    for name, var in ENV_VARS.items():
+        if env.get(name):
+            out[var] = parse_value(env[name])
+    if env.get(ENV_SET):
+        out.update(parse_assignments(env[ENV_SET].split(";")))
+    return out
+
+
+def layered_overrides(dotenv: Mapping[str, str], environ: Mapping[str, str],
+                      cli: Mapping[str, object]) -> Dict[str, object]:
+    merged: Dict[str, object] = {}
+    merged.update(env_layer(dotenv))
+    merged.update(env_layer(environ))
+    merged.update(cli)
+    return merged
+
+
+def find_ansible_playbook() -> Optional[str]:
+    venv = ROOT / "venv" / "bin" / "ansible-playbook"
+    if venv.exists():
+        return str(venv)
+    return shutil.which("ansible-playbook")
+
+
+def build_command(action: str, args: argparse.Namespace, extra_file: Optional[str],
+                  exe: str) -> List[str]:
+    cmd = [exe, str(ROOT / PLAYBOOKS[action])]
+    if action == "deploy":
+        cmd += ["--diff"] if args.apply else ["--check", "--diff"]
+    if args.limit:
+        cmd += ["--limit", args.limit]
+    if args.tags:
+        cmd += ["--tags", args.tags]
+    if extra_file:
+        cmd += ["-e", "@" + extra_file]
+    if args.verbose:
+        cmd.append("-" + "v" * args.verbose)
+    return cmd
+
+
+def make_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="mc1-slurm-deploy",
+        description="Run the MC1 Slurm Ansible playbooks (preflight, deploy, validate).",
+        epilog="deploy runs in --check --diff mode unless --apply is given.",
+    )
+    p.add_argument("action", choices=sorted(PLAYBOOKS))
+    p.add_argument("--apply", action="store_true",
+                   help="deploy: make the changes (default is a --check --diff dry run)")
+    p.add_argument("--limit", help="Ansible host pattern to restrict the run")
+    p.add_argument("--tags", help="Ansible tags to run")
+    p.add_argument("--jump", help="ProxyJump hop, USER@HOST (env MC1_JUMP)")
+    p.add_argument("--ssh-user", help="login account on the workers (env MC1_SSH_USER)")
+    p.add_argument("--puppet-policy", choices=["fail", "warn"],
+                   help="action when a Puppet agent is running (env MC1_PUPPET_POLICY)")
+    p.add_argument("--set", action="append", default=[], metavar="KEY=VALUE",
+                   help="override any config variable; repeatable (env MC1_SET='k=v;k2=v2')")
+    p.add_argument("--env-file", default=str(ROOT / ".env"),
+                   help="dotenv file read below the environment (default: %(default)s)")
+    p.add_argument("--print", dest="print_only", action="store_true",
+                   help="print the ansible-playbook command and the overrides; run nothing")
+    p.add_argument("-v", "--verbose", action="count", default=0,
+                   help="pass -v..-vvvv to ansible-playbook")
+    return p
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    args = make_parser().parse_args(argv)
+    try:
+        cli = parse_assignments(args.set)
+    except ValueError as exc:
+        print("mc1-slurm-deploy: %s" % exc, file=sys.stderr)
+        return 2
+    for opt, var in (("jump", "mc1_jump"), ("ssh_user", "mc1_ssh_user"),
+                     ("puppet_policy", "mc1_puppet_policy")):
+        if getattr(args, opt):
+            cli[var] = getattr(args, opt)
+    overrides = layered_overrides(parse_dotenv(Path(args.env_file)), os.environ, cli)
+
+    exe = find_ansible_playbook()
+    if exe is None and not args.print_only:
+        print("mc1-slurm-deploy: ansible-playbook not found; run ./bootstrap.sh", file=sys.stderr)
+        return 1
+
+    with tempfile.TemporaryDirectory(prefix="mc1-slurm-") as tmp:
+        extra_file = None
+        if overrides:
+            extra_file = os.path.join(tmp, "overrides.json")
+            with open(extra_file, "w") as fh:
+                json.dump(overrides, fh)
+            os.chmod(extra_file, 0o600)
+        cmd = build_command(args.action, args, extra_file, exe or "ansible-playbook")
+        if args.print_only:
+            print(" ".join(shlex.quote(c) for c in cmd))
+            print("overrides: %s" % json.dumps(overrides, sort_keys=True))
+            return 0
+        (ROOT / "results").mkdir(exist_ok=True)
+        env = dict(os.environ, ANSIBLE_CONFIG=str(ROOT / "ansible.cfg"))
+        return subprocess.call(cmd, cwd=str(ROOT), env=env)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

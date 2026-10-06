@@ -1,0 +1,45 @@
+.TH BOOTSTRAP.SH 1 "2026-10-06" "mu2edaq-batch-queues" "Mu2e DAQ Tools"
+.SH NAME
+bootstrap.sh \- set up the operator toolchain for mu2edaq-batch-queues
+.SH SYNOPSIS
+.B ./bootstrap.sh
+.RB [ \-\-python
+.IR path ]
+.RB [ \-\-no\-dev ]
+.RB [ \-h ]
+.SH DESCRIPTION
+Creates
+.I ./venv
+if it is missing, then installs or upgrades ansible-core, PyYAML, Jinja2 and
+pytest in it. Also installs the Ansible Galaxy collections listed in
+.I requirements.yml
+into
+.IR ./collections .
+It is safe to re-run.
+.PP
+A Python 3.9 interpreter gets ansible-core 2.15; Python 3.10 or newer gets
+2.17 or 2.18. The playbooks run on both.
+.PP
+On Windows 11, run
+.B bootstrap.ps1
+instead. It forwards to this script inside WSL2, because Ansible has no
+native Windows control node.
+.SH OPTIONS
+.TP
+.BI \-\-python " path"
+Interpreter for the venv (environment
+.BR PYTHON ,
+default
+.BR python3 ).
+Must be 3.9 or newer.
+.TP
+.B \-\-no\-dev
+Skip the test dependencies.
+.SH EXAMPLES
+.nf
+\&./bootstrap.sh
+PYTHON=python3.11 ./bootstrap.sh \-\-no\-dev
+venv/bin/python \-m pytest \-q tests
+.fi
+.SH SEE ALSO
+.BR mc1-slurm-deploy (1)

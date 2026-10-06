@@ -1,0 +1,4 @@
+# Ansible Galaxy collections, installed into ./collections by bootstrap.sh.
+collections:
+  - name: ansible.posix        # firewalld rich rules
+    version: ">=1.5.0"

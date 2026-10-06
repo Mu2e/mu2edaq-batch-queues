@@ -1,0 +1,21 @@
+{#- Validation results, keyed like the tracker's test matrix. Inputs are the
+    registered results of playbooks/validate.yml. -#}
+{%- macro node_state(n) -%}
+{%- set line = (v_sinfo.stdout_lines | default([]) | select('match', n ~ ' ') | list | first | default(n ~ ' absent')) -%}
+{{ line.split()[1] }}
+{%- endmacro -%}
+{
+  "stamp": {{ v_stamp | to_json }},
+  "user": {{ v_user | to_json }},
+  "checks": {
+    "slurmctld_ping": {{ (v_ping.rc == 0 and 'UP' in v_ping.stdout) | to_json }},
+    "node_state": { {% for n in v_nodes %}{{ n | to_json }}: {{ node_state(n) | to_json }}{{ ', ' if not loop.last }}{% endfor %} },
+    "node_idle": { {% for n in v_nodes %}{{ n | to_json }}: {{ (node_state(n) | regex_search('^(idle|mixed|allocated)') is not none) | to_json }}{{ ', ' if not loop.last }}{% endfor %} },
+    "munge_roundtrip": { {% for r in v_unmunge.results %}{{ v_nodes[loop.index0] | to_json }}: {{ (r.rc == 0) | to_json }}{{ ', ' if not loop.last }}{% endfor %} },
+    "srun_hostname": { {% for r in v_srun.results %}{{ r.item | to_json }}: {{ (r.rc == 0 and r.stdout | trim == r.item) | to_json }}{{ ', ' if not loop.last }}{% endfor %} },
+    "sbatch": { {% for r in v_sbatch.results %}{{ r.item | to_json }}: {{ (r.rc == 0 and r.stdout | trim | regex_search('^[0-9]+') is not none) | to_json }}{{ ', ' if not loop.last }}{% endfor %} },
+    "memory_limit_enforced": { {% for r in v_oom.results %}{{ r.item | to_json }}: {{ (r.rc != 0 and (r.stderr | lower | regex_search('oom|out of memory|killed|memoryerror') is not none)) | to_json }}{{ ', ' if not loop.last }}{% endfor %} },
+    "multi_node_srun": {{ ((v_multi.rc | default(1)) == 0 and (v_multi.stdout_lines | default([]) | unique | length) == (v_nodes | length)) | to_json if v_nodes | length > 1 else '"n/a"' }},
+    "sacct_records": {{ (v_sacct.stdout_lines | default([])) | to_json }}
+  }
+}

@@ -1,0 +1,8 @@
+---
+# Read-only. Gathers facts on every cluster node (later plays use them for
+# slurm.conf hardware lines and firewall sources) and stops on any problem.
+- name: Preflight checks (read-only)
+  hosts: slurm_cluster
+  gather_facts: true
+  roles:
+    - preflight

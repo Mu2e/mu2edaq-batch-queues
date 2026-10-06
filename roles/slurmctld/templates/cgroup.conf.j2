@@ -1,0 +1,8 @@
+# {{ ansible_managed }}
+# Served to compute nodes in configless mode together with slurm.conf.
+CgroupPlugin=cgroup/v2
+ConstrainCores=yes
+ConstrainRAMSpace=yes
+ConstrainSwapSpace=yes
+AllowedSwapSpace=0
+ConstrainDevices=no

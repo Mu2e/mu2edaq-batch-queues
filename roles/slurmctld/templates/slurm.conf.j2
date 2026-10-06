@@ -1,0 +1,72 @@
+# {{ ansible_managed }}
+#
+# slurm.conf for the Mu2e MC1 trigger cluster. Configless mode: this file
+# exists only on the controller; slurmd on each compute node fetches it from
+# slurmctld at start and on "scontrol reconfigure".
+{% set ctl_short = slurm_controller_fqdn.split('.')[0] %}
+{% set future_spec = slurm_future_node_spec if slurm_future_node_spec else (slurm_compute_nodes[0] if slurm_compute_nodes else {}) %}
+
+ClusterName={{ slurm_cluster_name }}
+SlurmctldHost={{ ctl_short }}({{ slurm_controller_fqdn }})
+SlurmctldParameters=enable_configless
+SlurmctldPort={{ slurm_ports.slurmctld }}
+SlurmdPort={{ slurm_ports.slurmd }}
+SrunPortRange={{ slurm_srun_port_range }}
+
+AuthType=auth/munge
+CredType=cred/munge
+SlurmUser=slurm
+SlurmdUser=root
+
+StateSaveLocation={{ slurm_state_save }}
+SlurmdSpoolDir={{ slurm_spool_dir }}
+SlurmctldLogFile={{ slurm_log_dir }}/slurmctld.log
+SlurmdLogFile={{ slurm_log_dir }}/slurmd.log
+SlurmctldDebug={{ slurm_debug }}
+SlurmdDebug={{ slurm_debug }}
+
+# A node that was DOWN for any reason rejoins once it registers with a valid
+# configuration.
+ReturnToService=2
+SlurmctldTimeout=120
+SlurmdTimeout=300
+InactiveLimit=0
+MinJobAge=300
+KillWait=30
+Waittime=0
+
+# Scheduling and resource isolation (cgroup v2, see cgroup.conf).
+SchedulerType=sched/backfill
+SelectType=select/cons_tres
+SelectTypeParameters=CR_Core_Memory
+DefMemPerCPU={{ slurm_def_mem_per_cpu }}
+ProctrackType=proctrack/cgroup
+TaskPlugin=task/cgroup,task/affinity
+MpiDefault=none
+
+# Accounting through slurmdbd on the controller. Only users with an
+# association (sacctmgr) may submit.
+AccountingStorageType=accounting_storage/slurmdbd
+AccountingStorageHost={{ slurm_controller_fqdn }}
+AccountingStoragePort={{ slurm_ports.slurmdbd }}
+AccountingStorageEnforce={{ slurm_accounting_enforce }}
+JobAcctGatherType=jobacct_gather/cgroup
+JobAcctGatherFrequency=30
+JobCompType=jobcomp/none
+
+# ---- Nodes ------------------------------------------------------------------
+# The controller ({{ ctl_short }}) runs no slurmd and is not listed.
+{% for n in slurm_compute_nodes %}
+NodeName={{ n.name }} NodeAddr={{ n.addr }} Sockets={{ n.sockets }} CoresPerSocket={{ n.cores_per_socket }} ThreadsPerCore={{ n.threads_per_core }} RealMemory={{ n.real_memory }} State=UNKNOWN
+{% endfor %}
+{% if slurm_future_nodelist and future_spec %}
+# Declared but not yet online. Hardware is assumed equal to the first compute
+# node unless slurm_future_node_spec says otherwise.
+NodeName={{ slurm_future_nodelist }} Sockets={{ future_spec.sockets }} CoresPerSocket={{ future_spec.cores_per_socket }} ThreadsPerCore={{ future_spec.threads_per_core }} RealMemory={{ future_spec.real_memory }} State=FUTURE
+{% endif %}
+
+# ---- Partitions -------------------------------------------------------------
+{% set all_nodes = (slurm_compute_nodes | map(attribute='name') | list) + ([slurm_future_nodelist] if slurm_future_nodelist else []) %}
+{% for p in slurm_partitions %}
+PartitionName={{ p.name }} Nodes={{ p.nodes | default(all_nodes | join(',')) }} Default={{ 'YES' if p.default | default(false) else 'NO' }} MaxTime={{ p.max_time | default('INFINITE') }} State=UP
+{% endfor %}
