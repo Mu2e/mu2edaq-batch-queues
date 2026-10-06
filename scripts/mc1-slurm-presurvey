@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# mc1-slurm-presurvey - read-only pre-install survey of MC1 nodes for Slurm.
+#
+# Runs scripts/lib/presurvey-remote.sh on each target host through the G2
+# gateway ProxyJump and writes one text report per host. Nothing is installed
+# or configured; see man/man1/mc1-slurm-presurvey.1.
+#
+# Override order: command line > environment > built-in default.
+set -euo pipefail
+
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+remote_script="$here/lib/presurvey-remote.sh"
+
+jump=${MC1_JUMP:-mu2eshift@g2gateway01.fnal.gov}
+target_user=${MC1_TARGET_USER:-root}
+domain=${MC1_DOMAIN:-fnal.gov}
+outdir=${MC1_OUTDIR:-}
+timeout=${MC1_CONNECT_TIMEOUT:-10}
+hosts=()
+dry_run=0
+
+usage() {
+    cat <<EOF
+Usage: ${0##*/} [options] [host ...]
+
+Read-only Slurm pre-install survey of MC1 nodes via ProxyJump.
+
+Options:
+  -j, --jump USER@HOST     ProxyJump hop        (env MC1_JUMP, default $jump)
+  -u, --user USER          login on targets     (env MC1_TARGET_USER, default $target_user)
+  -d, --domain DOMAIN      appended to bare names (env MC1_DOMAIN, default $domain)
+  -o, --outdir DIR         report directory     (env MC1_OUTDIR, default results/presurvey-<UTC stamp>)
+  -t, --timeout SEC        ssh ConnectTimeout   (env MC1_CONNECT_TIMEOUT, default $timeout)
+      --gateway            survey the jump host itself instead of workers
+  -n, --dry-run            print the ssh commands, do not connect
+  -h, --help               this text
+
+Hosts default to mu2e-mc1-worker-01 .. -03. Numbers are accepted: "2" means
+mu2e-mc1-worker-02.
+EOF
+}
+
+gateway_only=0
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -j|--jump)    jump=$2; shift 2 ;;
+        -u|--user)    target_user=$2; shift 2 ;;
+        -d|--domain)  domain=$2; shift 2 ;;
+        -o|--outdir)  outdir=$2; shift 2 ;;
+        -t|--timeout) timeout=$2; shift 2 ;;
+        --gateway)    gateway_only=1; shift ;;
+        -n|--dry-run) dry_run=1; shift ;;
+        -h|--help)    usage; exit 0 ;;
+        -*)           echo "unknown option: $1" >&2; usage >&2; exit 2 ;;
+        *)            hosts+=("$1"); shift ;;
+    esac
+done
+
+[[ -r $remote_script ]] || { echo "missing $remote_script" >&2; exit 1; }
+[[ ${#hosts[@]} -eq 0 ]] && hosts=(01 02 03)
+
+fqdn() {
+    local h=$1
+    [[ $h =~ ^[0-9]+$ ]] && h=$(printf 'mu2e-mc1-worker-%02d' "$((10#$h))")
+    [[ $h == *.* ]] || h="$h.$domain"
+    printf '%s' "$h"
+}
+
+[[ -n $outdir ]] || outdir="$here/../results/presurvey-$(date -u +%Y%m%dT%H%M%SZ)"
+[[ $dry_run -eq 1 ]] || mkdir -p "$outdir"
+
+# The remote script travels base64-encoded and runs from a process
+# substitution, so its stdin is ssh's (-n => /dev/null). Feeding it on stdin
+# instead lets dnf consume the rest of the script as prompt answers.
+payload=$(base64 < "$remote_script" | tr -d '\n')
+remote_cmd="bash <(echo $payload | base64 -d)"
+ssh_opts=(-n -o BatchMode=yes -o ConnectTimeout="$timeout")
+
+run_one() {
+    local label=$1; shift
+    local out="$outdir/$label.txt"
+    if [[ $dry_run -eq 1 ]]; then
+        printf 'ssh'; printf ' %q' "$@"; printf ' <remote-script>\n'
+        return 0
+    fi
+    printf '%-28s ' "$label"
+    if ssh "$@" "$remote_cmd" > "$out" 2>&1; then
+        echo "ok      -> $out"
+    else
+        echo "FAILED (exit $?) -> $out"
+    fi
+}
+
+if [[ $gateway_only -eq 1 ]]; then
+    run_one "${jump#*@}" "${ssh_opts[@]}" "$jump"
+else
+    for h in "${hosts[@]}"; do
+        t=$(fqdn "$h")
+        run_one "${t%%.*}" "${ssh_opts[@]}" -J "$jump" "$target_user@$t"
+    done
+fi

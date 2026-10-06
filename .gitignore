@@ -1,0 +1,24 @@
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+
+# Build output
+build/
+
+# Survey and test output: contains enclave host detail, never published
+results/
+
+# Secrets: munge/slurm keys, database credentials, local overrides
+*.key
+munge.key
+slurm.key
+.env
+config/*.local.yaml
+secrets/
+
+# Editor / OS
+.DS_Store
+*.swp

@@ -1,0 +1,121 @@
+.TH MC1-SLURM-PRESURVEY 1 "2026-10-06" "mu2edaq-batch-queues" "Mu2e DAQ Tools"
+.SH NAME
+mc1-slurm-presurvey \- read-only Slurm pre-install survey of the MC1 trigger worker nodes
+.SH SYNOPSIS
+.B mc1-slurm-presurvey
+.RB [ \-j
+.IR user@host ]
+.RB [ \-u
+.IR user ]
+.RB [ \-d
+.IR domain ]
+.RB [ \-o
+.IR dir ]
+.RB [ \-t
+.IR sec ]
+.RB [ \-\-gateway ]
+.RB [ \-n ]
+.RI [ host ...]
+.SH DESCRIPTION
+.B mc1-slurm-presurvey
+logs into each MC1 worker through the G2 gateway ProxyJump and runs
+.IR scripts/lib/presurvey-remote.sh ,
+which reports the facts a Slurm deployment depends on: OS and kernel,
+installed Slurm/munge/MariaDB/PMIx packages, enabled dnf repositories and the
+Slurm versions they offer, account resolution (local
+.I /etc/passwd
+versus SSSD) and the free system UID/GID range, configuration management
+(Puppet/OpenVox) state, firewall state and rules, time synchronisation,
+cgroup version and controllers, CPU/memory topology, filesystems and shared
+mounts, forward resolution of all sixteen worker names, TCP reachability of the
+peer workers, and running services.
+.PP
+The survey is read-only by intent. The one side effect is that
+.B dnf list
+refreshes repository metadata in the dnf cache of the login account.
+.PP
+One plain-text report per host is written to the output directory. Reports
+contain enclave host detail and belong in the git-ignored
+.I results/
+tree; do not commit them.
+.SH OPTIONS
+.TP
+.BR \-j ", " \-\-jump " " \fIuser@host\fR
+ProxyJump hop into the enclave. Default
+.BR mu2eshift@g2gateway01.fnal.gov .
+.TP
+.BR \-u ", " \-\-user " " \fIuser\fR
+Login account on the target workers. Default
+.BR root ,
+which is needed to read firewall rules, sudoers and Puppet run state.
+.TP
+.BR \-d ", " \-\-domain " " \fIdomain\fR
+Domain appended to host names without a dot. Default
+.BR fnal.gov .
+.TP
+.BR \-o ", " \-\-outdir " " \fIdir\fR
+Report directory. Default
+.IR results/presurvey-<UTC-stamp> .
+.TP
+.BR \-t ", " \-\-timeout " " \fIsec\fR
+ssh ConnectTimeout. Default 10.
+.TP
+.B \-\-gateway
+Survey the jump host itself (as the jump account) instead of the workers.
+.TP
+.BR \-n ", " \-\-dry\-run
+Print the ssh commands without connecting.
+.TP
+.BR \-h ", " \-\-help
+Show usage.
+.PP
+Positional
+.I host
+arguments may be full names, short names, or bare numbers (\fB2\fR means
+\fBmu2e-mc1-worker-02\fR). Default: workers 01, 02 and 03.
+.SH ENVIRONMENT
+Each option has an environment override; the command line wins over the
+environment, which wins over the built-in default.
+.TP
+.B MC1_JUMP
+.TP
+.B MC1_TARGET_USER
+.TP
+.B MC1_DOMAIN
+.TP
+.B MC1_OUTDIR
+.TP
+.B MC1_CONNECT_TIMEOUT
+.SH EXIT STATUS
+0 when the arguments parse; a failed host is reported as
+.B FAILED
+on stdout and its report holds the ssh error text.
+.SH EXAMPLES
+Survey workers 01\(en03 as root through the default jump:
+.PP
+.RS
+.nf
+klist
+scripts/mc1-slurm-presurvey
+.fi
+.RE
+.PP
+Survey only worker-02 as mu2eshift, and the gateway:
+.PP
+.RS
+.nf
+scripts/mc1-slurm-presurvey -u mu2eshift 2
+scripts/mc1-slurm-presurvey --gateway
+.fi
+.RE
+.SH NOTES
+A valid Kerberos ticket is required; authentication is GSSAPI through the
+operator's ssh configuration. Claude Code's auto-mode classifier treats
+logins to these production hosts as production reads; run the tool from
+your own shell or with the
+.B !
+prefix inside a Claude Code session.
+.SH SEE ALSO
+.BR ssh (1),
+.BR dnf (8),
+.BR slurm.conf (5)
