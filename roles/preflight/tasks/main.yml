@@ -4,14 +4,14 @@
 # continues, so one pass reports every problem; the final verdict task then
 # fails the host (and stops a deploy) if any check failed.
 
-- name: OS is AlmaLinux 9
+- name: OS is AlmaLinux 9 or 10
   ansible.builtin.assert:
     that:
       - ansible_facts.distribution == "AlmaLinux"
-      - ansible_facts.distribution_major_version == "9"
+      - ansible_facts.distribution_major_version in ["9", "10"]
     fail_msg: >-
       {{ inventory_hostname }} runs {{ ansible_facts.distribution }}
-      {{ ansible_facts.distribution_version }}; this deployment targets AlmaLinux 9.
+      {{ ansible_facts.distribution_version }}; this deployment targets AlmaLinux 9 and 10.
     quiet: true
   register: pf_c_os
   ignore_errors: true
@@ -187,23 +187,19 @@
   register: pf_c_job_gid
   ignore_errors: true
 
-- name: Query the newest Slurm version in the enabled repositories
-  ansible.builtin.shell: >-
-    dnf -q --assumeno
-    {% for r in mc1_dnf_disablerepo %}--disablerepo={{ r }} {% endfor %}
-    repoquery --latest-limit 1 --qf '%{version}' slurm
+- name: Locally built Slurm RPMs for this node's EL major
+  ansible.builtin.find:
+    paths: "{{ slurm_rpm_dir }}/el{{ ansible_facts.distribution_major_version }}"
+    patterns: "slurm-{{ slurm_version }}-*.rpm"
+  delegate_to: localhost
+  become: false
   register: pf_slurm_version
-  changed_when: false
-  check_mode: false
-  failed_when: pf_slurm_version.stdout | trim == ''
   ignore_errors: true
 
-- name: Repositories offer Slurm >= slurm_min_version
+- name: The RPM bundle for slurm_version exists (scripts/mc1-slurm-build-rpms)
   ansible.builtin.assert:
-    that:
-      - pf_slurm_version.stdout | default('') | trim != ''
-      - pf_slurm_version.stdout | trim is version(slurm_min_version, '>=')
-    fail_msg: "Slurm {{ pf_slurm_version.stdout | trim }} offered; need >= {{ slurm_min_version }}"
+    that: pf_slurm_version.matched | default(0) > 0
+    fail_msg: "no slurm-{{ slurm_version }} RPMs in {{ slurm_rpm_dir }}/el{{ ansible_facts.distribution_major_version }}"
     quiet: true
   register: pf_c_slurm_version
   ignore_errors: true
@@ -220,7 +216,7 @@
 - name: Preflight summary
   ansible.builtin.debug:
     msg:
-      - "slurm available: {{ pf_slurm_version.stdout | trim }}"
+      - "slurm bundle: {{ slurm_version }} el{{ ansible_facts.distribution_major_version }} ({{ pf_slurm_version.matched | default(0) }} base rpm)"
       - "cpus: {{ ansible_facts.processor_count }} sockets x {{ ansible_facts.processor_cores }} cores x {{ ansible_facts.processor_threads_per_core }} threads; mem {{ ansible_facts.memtotal_mb }} MB"
       - "address: {{ ansible_facts.default_ipv4.address | default('none') }}"
       - "firewalld: {{ (ansible_facts.services['firewalld.service'] | default({})).get('state', 'absent') }}"

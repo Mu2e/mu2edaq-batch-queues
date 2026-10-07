@@ -3,10 +3,9 @@
 # slurm_controller : slurmctld + slurmdbd + MariaDB + job submission (no slurmd)
 # slurm_compute    : slurmd
 #
-# Workers that are not yet online are NOT listed here. They are declared to
-# Slurm as State=FUTURE through slurm_future_nodelist (group_vars/all.yml).
-# To bring one online: add it under slurm_compute, shrink
-# slurm_future_nodelist, and re-run the deploy.
+# All 18 workers are online (2026-10-07): 01 is the controller, 02-18 compute.
+# Workers that are not yet online can be declared to Slurm as State=FUTURE
+# through slurm_future_nodelist (group_vars/all.yml) instead of listed here.
 all:
   vars:
     ansible_user: "{{ mc1_ssh_user }}"
@@ -24,5 +23,4 @@ all:
             mu2e-mc1-worker-01.fnal.gov:
         slurm_compute:
           hosts:
-            mu2e-mc1-worker-02.fnal.gov:
-            mu2e-mc1-worker-03.fnal.gov:
+            mu2e-mc1-worker-[02:18].fnal.gov:

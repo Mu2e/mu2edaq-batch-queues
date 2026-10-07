@@ -11,6 +11,7 @@
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
     roles_dir: "{{ playbook_dir }}/../roles"
     slurmdbd_db_password: test-password
+    slurm_future_nodelist: "mu2e-mc1-worker-[04-16]"   # exercise the FUTURE path
     slurm_compute_nodes:
       - {name: mu2e-mc1-worker-02, addr: mu2e-mc1-worker-02.fnal.gov, sockets: 2, cores_per_socket: 16, threads_per_core: 2, real_memory: 254000}
       - {name: mu2e-mc1-worker-03, addr: mu2e-mc1-worker-03.fnal.gov, sockets: 2, cores_per_socket: 16, threads_per_core: 2, real_memory: 254000}

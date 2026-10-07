@@ -28,3 +28,6 @@ docs/private/
 
 # Ansible Galaxy collections (installed by bootstrap.sh)
 collections/
+
+# Locally built RPM bundles (scripts/mc1-slurm-build-rpms)
+artifacts/

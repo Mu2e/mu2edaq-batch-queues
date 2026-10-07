@@ -61,7 +61,11 @@ mc1_job_accounts:
 # ----------------------------------------------------------------- slurm ----
 slurm_controller_fqdn: "{{ groups['slurm_controller'][0] }}"   # derived; edit the inventory instead
 slurm_cluster_name: mc1
-slurm_min_version: "22.05"     # configless + cgroup/v2 need >= 22.05
+# One Slurm release on every node, built from SchedMD source as RPMs for EL9
+# and EL10 (scripts/mc1-slurm-build-rpms) because EPEL ships 22.05 on EL9
+# and 26.05 on EL10, and slurmd may never be newer than slurmctld.
+slurm_version: "26.05.4"
+slurm_rpm_dir: "{{ playbook_dir }}/../artifacts/rpms/{{ slurm_version }}"   # el9/, el10/ (git-ignored)
 slurm_packages_controller: [slurm, slurm-slurmctld, slurm-slurmdbd]
 slurm_packages_compute: [slurm, slurm-slurmd]
 slurm_ports:
@@ -79,8 +83,9 @@ slurm_accounting_enforce: associations,limits
 slurm_def_mem_per_cpu: 2000            # MB, when a job asks for no memory
 slurm_node_mem_reserve_mb: 2048        # kept back from RealMemory for the OS
 
-# Workers declared to Slurm but not yet online (Slurm hostlist syntax).
-slurm_future_nodelist: "mu2e-mc1-worker-[04-16]"
+# Workers declared to Slurm but not yet online (Slurm hostlist syntax);
+# empty = none. All 18 workers are in the inventory since 2026-10-07.
+slurm_future_nodelist: ""
 # Hardware for FUTURE nodes; empty means "same as the first compute node".
 slurm_future_node_spec: {}
 

@@ -1,13 +1,65 @@
 ---
 # Packages and directories shared by controller and compute nodes.
 
-- name: Slurm packages for this node's role
-  ansible.builtin.dnf:
-    name: >-
+- name: Packages this node's Slurm role needs
+  ansible.builtin.set_fact:
+    sc_pkgs: >-
       {{ slurm_packages_controller if inventory_hostname in groups['slurm_controller']
          else slurm_packages_compute }}
+    sc_el: "el{{ ansible_facts.distribution_major_version }}"
+    sc_cache: /var/cache/mc1-slurm/{{ slurm_version }}
+
+- name: Matching RPM files in the local bundle
+  ansible.builtin.find:
+    paths: "{{ slurm_rpm_dir }}/{{ sc_el }}"
+    patterns: "{{ sc_pkgs | map('regex_replace', '$', '-' ~ slurm_version ~ '-*.x86_64.rpm') | list }}"
+  delegate_to: localhost
+  become: false
+  register: sc_rpms
+
+- name: All required packages are in the bundle
+  ansible.builtin.assert:
+    that: sc_rpms.files | length == sc_pkgs | length
+    fail_msg: "{{ sc_el }} bundle has {{ sc_rpms.files | map(attribute='path') | map('basename') | list }}, need {{ sc_pkgs }}"
+    quiet: true
+
+- name: Staging directory for the RPMs
+  ansible.builtin.file:
+    path: "{{ sc_cache }}"
+    state: directory
+    mode: "0755"
+
+- name: Copy the RPMs to the node
+  ansible.builtin.copy:
+    src: "{{ item.path }}"
+    dest: "{{ sc_cache }}/"
+    mode: "0644"
+  loop: "{{ sc_rpms.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+
+- name: dnf versionlock plugin
+  ansible.builtin.dnf:
+    name: python3-dnf-plugin-versionlock
     state: present
     disablerepo: "{{ mc1_dnf_disablerepo }}"
+
+- name: Install the locally built Slurm (dependencies from the OS repos)
+  ansible.builtin.dnf:
+    name: "{{ sc_rpms.files | map(attribute='path') | map('basename') | map('regex_replace', '^', sc_cache ~ '/') | list }}"
+    state: present
+    disable_gpg_check: true      # our own unsigned build, copied over ssh
+    disablerepo: "{{ mc1_dnf_disablerepo }}"
+
+- name: Lock Slurm at this build so EPEL's slurm can never replace it
+  ansible.builtin.shell: |
+    set -e
+    dnf versionlock delete 'slurm*' >/dev/null 2>&1 || true
+    dnf versionlock add {{ sc_pkgs | join(' ') }}
+  args:
+    executable: /bin/bash
+  changed_when: false
+  when: not ansible_check_mode
 
 - name: Common Slurm directories
   ansible.builtin.file:

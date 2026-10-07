@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# mc1-slurm-build-rpms - build SchedMD Slurm RPMs for EL9 and EL10 on an MC1
+# worker inside throwaway AlmaLinux containers, then fetch them into
+# artifacts/rpms/<version>/{el9,el10}/ for the deployer. Build dependencies
+# never touch the host. See man/man1/mc1-slurm-build-rpms.1.
+# Override order: command line > environment > built-in default.
+set -euo pipefail
+
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+root=$(cd "$here/.." && pwd)
+version=${MC1_SLURM_VERSION:-26.05.4}
+host=${MC1_BUILD_HOST:-mu2e-mc1-worker-17.fnal.gov}
+jump=${MC1_JUMP:-mu2eshift@g2gateway01.fnal.gov}
+user=${MC1_SSH_USER:-root}
+fetch_only=0
+
+usage() {
+    cat <<USAGE
+Usage: ${0##*/} [-V version] [-H host] [-j user@jump] [-u user] [--fetch-only]
+
+  -V, --version VER   Slurm release (env MC1_SLURM_VERSION, default $version)
+  -H, --host HOST     build host with podman (env MC1_BUILD_HOST, default $host)
+  -j, --jump U@H      ProxyJump hop (env MC1_JUMP, default $jump)
+  -u, --user USER     login on the build host (env MC1_SSH_USER, default $user)
+      --fetch-only    skip the build, fetch existing RPMs
+USAGE
+}
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -V|--version) version=$2; shift 2 ;;
+        -H|--host) host=$2; shift 2 ;;
+        -j|--jump) jump=$2; shift 2 ;;
+        -u|--user) user=$2; shift 2 ;;
+        --fetch-only) fetch_only=1; shift ;;
+        -h|--help) usage; exit 0 ;;
+        *) echo "unknown option: $1" >&2; usage >&2; exit 2 ;;
+    esac
+done
+
+ssh_cmd=(ssh -n -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=30 -J "$jump" "$user@$host")
+if [[ $fetch_only -eq 0 ]]; then
+    payload=$(base64 < "$here/lib/build-rpms-remote.sh" | tr -d '\n')
+    "${ssh_cmd[@]}" "bash <(echo $payload | base64 -d) $version"
+fi
+dest="$root/artifacts/rpms/$version"
+mkdir -p "$dest"
+"${ssh_cmd[@]}" "cd /scratch/mc1-slurm-build && tar -cf - src/SHA256 el9/*-$version-*.rpm el10/*-$version-*.rpm" | tar -C "$dest" -xf -
+echo "fetched into $dest:"; (cd "$dest" && ls el9 el10 | sed 's/^/  /'; cat src/SHA256)

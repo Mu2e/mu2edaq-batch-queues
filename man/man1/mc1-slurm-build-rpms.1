@@ -1,0 +1,71 @@
+.TH MC1-SLURM-BUILD-RPMS 1 "2026-10-07" "mu2edaq-batch-queues" "Mu2e DAQ Tools"
+.SH NAME
+mc1-slurm-build-rpms \- build Slurm RPMs for EL9 and EL10 and fetch them for the deployer
+.SH SYNOPSIS
+.B mc1-slurm-build-rpms
+.RB [ \-V
+.IR version ]
+.RB [ \-H
+.IR host ]
+.RB [ \-j
+.IR user@jump ]
+.RB [ \-u
+.IR user ]
+.RB [ \-\-fetch\-only ]
+.SH DESCRIPTION
+The MC1 workers mix AlmaLinux 9 and 10. Their EPEL repositories ship
+different Slurm releases (22.05 and 26.05), and slurmd must never be newer than
+slurmctld. This tool builds one SchedMD release for both platforms.
+.PP
+On the build host it downloads
+.IR slurm-<version>.tar.bz2
+from download.schedmd.com into
+.IR /scratch/mc1-slurm-build/src
+and records its SHA-256. It then runs
+.B rpmbuild \-ta \-\-with mysql
+inside
+.B quay.io/almalinux/almalinux:9
+and
+.B :10
+podman containers, so build dependencies never touch the host. Finally it
+fetches the RPMs into
+.IR artifacts/rpms/<version>/el9
+and
+.IR el10 ,
+which are git-ignored. The deployer installs from there
+.RB ( slurm_rpm_dir ,
+.BR slurm_version )
+and version-locks the packages.
+.SH OPTIONS
+.TP
+.BR \-V ", " \-\-version
+Slurm release (env
+.BR MC1_SLURM_VERSION ,
+default 26.05.4).
+.TP
+.BR \-H ", " \-\-host
+Build host with podman (env
+.BR MC1_BUILD_HOST ,
+default mu2e-mc1-worker-17.fnal.gov).
+.TP
+.BR \-j ", " \-\-jump
+ProxyJump hop (env
+.BR MC1_JUMP ).
+.TP
+.BR \-u ", " \-\-user
+Login on the build host (env
+.BR MC1_SSH_USER ,
+default root).
+.TP
+.B \-\-fetch\-only
+Fetch RPMs built earlier; do not rebuild.
+.SH EXAMPLES
+.nf
+scripts/mc1-slurm-build-rpms
+scripts/mc1-slurm-build-rpms \-V 26.05.5
+scripts/mc1-slurm-deploy deploy \-\-set slurm_version=26.05.5
+.fi
+.SH SEE ALSO
+.BR mc1-slurm-deploy (1),
+.BR rpmbuild (8),
+.BR podman (1)

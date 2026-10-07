@@ -57,6 +57,7 @@ def test_job_accounts(cfg):
 
 def expand(hostlist):
     """Expand a single-bracket Slurm hostlist like name-[04-16]."""
+    hostlist = hostlist.replace(":", "-")
     m = re.fullmatch(r"(.*)\[(\d+)-(\d+)\]", hostlist)
     if not m:
         return [hostlist]
@@ -65,10 +66,13 @@ def expand(hostlist):
 
 
 def test_future_nodes_disjoint_from_inventory(inventory, cfg):
-    future = set(expand(cfg["slurm_future_nodelist"]))
+    future = set(expand(cfg["slurm_future_nodelist"])) if cfg["slurm_future_nodelist"] else set()
     live = {h.split(".")[0] for g in ("slurm_controller", "slurm_compute") for h in hosts(inventory, g)}
-    assert future, "future nodelist should expand"
     assert not future & live
+
+
+def test_all_workers_are_compute(inventory):
+    assert hosts(inventory, "slurm_compute") == ["mu2e-mc1-worker-[02:18].fnal.gov"]
 
 
 def test_ports_distinct(cfg):
