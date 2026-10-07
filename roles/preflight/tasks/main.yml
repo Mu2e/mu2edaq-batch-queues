@@ -81,20 +81,50 @@
   register: pf_c_clock
   ignore_errors: true
 
-- name: Read the passwd database
-  ansible.builtin.getent:
-    database: passwd
+# Account checks use keyed `getent` lookups. Enumerating the passwd database
+# (ansible getent module without a key) misses SSSD/LDAP users, because SSSD
+# does not enumerate by default; mu2eshift and mu2edaq come from SSSD here.
 
-- name: Read the group database
-  ansible.builtin.getent:
-    database: group
+- name: Build the list of keyed lookups
+  ansible.builtin.set_fact:
+    pf_new_accounts: "{{ mc1_service_accounts + (mc1_job_accounts | selectattr('create') | list) }}"
+    pf_lookup_users: >-
+      {{ ((mc1_service_accounts + mc1_job_accounts) | map(attribute='name') | list
+         + (mc1_service_accounts + (mc1_job_accounts | selectattr('create') | list))
+           | map(attribute='uid') | reject('none') | map('string') | list) | unique }}
+    pf_lookup_groups: >-
+      {{ (mc1_service_accounts | map(attribute='name') | list
+         + mc1_job_accounts | selectattr('create') | map(attribute='group') | list
+         + (mc1_service_accounts + (mc1_job_accounts | selectattr('gid', 'defined') | list))
+           | map(attribute='gid') | reject('none') | map('string') | list) | unique }}
+
+- name: getent passwd <name|uid>
+  ansible.builtin.command: getent passwd {{ item }}
+  loop: "{{ pf_lookup_users }}"
+  register: pf_pw
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: getent group <name|gid>
+  ansible.builtin.command: getent group {{ item }}
+  loop: "{{ pf_lookup_groups }}"
+  register: pf_gr
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Index the lookups (key -> getent line, '' when absent)
+  ansible.builtin.set_fact:
+    pf_passwd: "{{ dict(pf_pw.results | map(attribute='item') | zip(pf_pw.results | map(attribute='stdout'))) }}"
+    pf_group: "{{ dict(pf_gr.results | map(attribute='item') | zip(pf_gr.results | map(attribute='stdout'))) }}"
 
 - name: Accounts to be created have a uid
   ansible.builtin.assert:
     that: item.uid is not none
     fail_msg: "{{ item.name }}: set uid in config/group_vars/all.yml (or --set) before deploying"
     quiet: true
-  loop: "{{ mc1_service_accounts + (mc1_job_accounts | selectattr('create') | list) }}"
+  loop: "{{ pf_new_accounts }}"
   loop_control:
     label: "{{ item.name }}"
   register: pf_c_uid_set
@@ -104,19 +134,14 @@
   ansible.builtin.assert:
     that:
       - item.uid is not none
-      - uid_holders | length == 0 or uid_holders == [item.name]
-      - item.name not in ansible_facts.getent_passwd or (ansible_facts.getent_passwd[item.name][1] | int) == (item.uid | int)
-    fail_msg: >-
-      {{ item.name }} uid {{ item.uid }}: held by {{ uid_holders }};
-      existing {{ item.name }} uid is
-      {{ ansible_facts.getent_passwd[item.name][1] if item.name in ansible_facts.getent_passwd else 'none' }}
+      - by_uid == '' or by_uid.split(':')[0] == item.name
+      - by_name == '' or (by_name.split(':')[2] | int) == (item.uid | int)
+    fail_msg: "{{ item.name }} uid {{ item.uid }}: uid held by '{{ by_uid.split(':')[0] }}'; existing {{ item.name }}: '{{ by_name }}'"
     quiet: true
   vars:
-    uid_holders: >-
-      {{ ansible_facts.getent_passwd | dict2items
-         | selectattr('value.1', 'equalto', item.uid | string)
-         | map(attribute='key') | list }}
-  loop: "{{ mc1_service_accounts + (mc1_job_accounts | selectattr('create') | list) }}"
+    by_uid: "{{ pf_passwd[item.uid | string] | default('') }}"
+    by_name: "{{ pf_passwd[item.name] | default('') }}"
+  loop: "{{ pf_new_accounts }}"
   loop_control:
     label: "{{ item.name }}"
   register: pf_c_uid_free
@@ -125,35 +150,36 @@
 - name: Service-account GIDs are free, or already belong to the same group name
   ansible.builtin.assert:
     that:
-      - gid_holders | length == 0 or gid_holders == [item.name]
-      - item.name not in ansible_facts.getent_group or (ansible_facts.getent_group[item.name][1] | int) == (item.gid | int)
-    fail_msg: "{{ item.name }} gid {{ item.gid }}: held by {{ gid_holders }}"
+      - by_gid == '' or by_gid.split(':')[0] == item.name
+      - by_name == '' or (by_name.split(':')[2] | int) == (item.gid | int)
+    fail_msg: "{{ item.name }} gid {{ item.gid }}: gid held by '{{ by_gid.split(':')[0] }}'; existing group: '{{ by_name }}'"
     quiet: true
   vars:
-    gid_holders: >-
-      {{ ansible_facts.getent_group | dict2items
-         | selectattr('value.1', 'equalto', item.gid | string)
-         | map(attribute='key') | list }}
+    by_gid: "{{ pf_group[item.gid | string] | default('') }}"
+    by_name: "{{ pf_group[item.name] | default('') }}"
   loop: "{{ mc1_service_accounts }}"
   loop_control:
     label: "{{ item.name }}"
   register: pf_c_gid_free
   ignore_errors: true
 
-- name: Existing job accounts and the job group are present
+- name: Existing job accounts and the job groups are present
   ansible.builtin.assert:
     that:
-      - (mc1_job_accounts | rejectattr('create') | map(attribute='name') | difference(ansible_facts.getent_passwd.keys() | list)) | length == 0
-      - (mc1_job_accounts | selectattr('create') | map(attribute='group') | difference(ansible_facts.getent_group.keys() | list)) | length == 0
-    fail_msg: "missing accounts or groups on {{ inventory_hostname }}"
+      - missing_users | length == 0
+      - missing_groups | length == 0
+    fail_msg: "missing on {{ inventory_hostname }}: users {{ missing_users }}, groups {{ missing_groups }}"
     quiet: true
+  vars:
+    missing_users: "{{ mc1_job_accounts | rejectattr('create') | map(attribute='name') | reject('in', pf_passwd | dict2items | rejectattr('value', 'equalto', '') | map(attribute='key') | list) | list }}"
+    missing_groups: "{{ mc1_job_accounts | selectattr('create') | map(attribute='group') | reject('in', pf_group | dict2items | rejectattr('value', 'equalto', '') | map(attribute='key') | list) | list }}"
   register: pf_c_accounts
   ignore_errors: true
 
 - name: Job-account groups have the configured gid
   ansible.builtin.assert:
-    that: (ansible_facts.getent_group[item.group][1] | int) == (item.gid | int)
-    fail_msg: "group {{ item.group }} has gid {{ ansible_facts.getent_group[item.group][1] | default('none') }}, config says {{ item.gid }}"
+    that: (pf_group[item.group] | default('::-1')).split(':')[2] | int == item.gid | int
+    fail_msg: "group {{ item.group }} is '{{ pf_group[item.group] | default('') }}', config says gid {{ item.gid }}"
     quiet: true
   loop: "{{ mc1_job_accounts | selectattr('create') | selectattr('gid', 'defined') | list }}"
   loop_control:

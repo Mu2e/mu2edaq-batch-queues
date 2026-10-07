@@ -3,9 +3,21 @@
 # install so the munge and slurm RPM scriptlets find the accounts already
 # present and do not allocate dynamic IDs.
 
-- name: Read the passwd database
-  ansible.builtin.getent:
-    database: passwd
+- name: Look up existing job accounts and k5login sources (keyed; includes SSSD)
+  ansible.builtin.command: getent passwd {{ item }}
+  loop: >-
+    {{ (mc1_job_accounts | rejectattr('create') | map(attribute='name') | list
+       + mc1_job_accounts | selectattr('create') | map(attribute='k5login_from', default=[]) | flatten) | unique }}
+  register: acct_pw
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Index them (name -> passwd fields)
+  ansible.builtin.set_fact:
+    acct_passwd: >-
+      {{ dict(acct_pw.results | selectattr('rc', 'equalto', 0) | map(attribute='item')
+         | zip(acct_pw.results | selectattr('rc', 'equalto', 0) | map(attribute='stdout') | map('split', ':'))) }}
 
 - name: Service-account groups
   ansible.builtin.group:
@@ -46,12 +58,12 @@
 
 - name: Read the source accounts' .k5login files
   ansible.builtin.slurp:
-    src: "{{ ansible_facts.getent_passwd[item.1][4] }}/.k5login"
+    src: "{{ acct_passwd[item.1][4] }}/.k5login"
   loop: "{{ mc1_job_accounts | selectattr('create') | list | subelements('k5login_from', skip_missing=True) }}"
   loop_control:
     label: "{{ item.0.name }} <- {{ item.1 }}"
   register: k5_src
-  when: item.1 in ansible_facts.getent_passwd
+  when: item.1 in acct_passwd
   failed_when: false
 
 - name: .k5login for new job accounts (union of the sources plus k5login)
@@ -70,11 +82,11 @@
 
 - name: Repair ownership of existing job-account home directories
   ansible.builtin.file:
-    path: "{{ ansible_facts.getent_passwd[item.name][4] }}"
+    path: "{{ acct_passwd[item.name][4] }}"
     state: directory
     owner: "{{ item.name }}"
-    group: "{{ ansible_facts.getent_passwd[item.name][2] }}"
+    group: "{{ acct_passwd[item.name][2] }}"
   loop: "{{ mc1_job_accounts | rejectattr('create') | selectattr('fix_home_ownership', 'defined') | selectattr('fix_home_ownership') | list }}"
   loop_control:
     label: "{{ item.name }}"
-  when: item.name in ansible_facts.getent_passwd
+  when: item.name in acct_passwd
