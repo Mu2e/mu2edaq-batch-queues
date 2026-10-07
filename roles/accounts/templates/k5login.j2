@@ -1,0 +1,10 @@
+{#- Union of the .k5login files slurped from acct.k5login_from (k5_src) and
+    acct.k5login; trimmed, comments and blanks dropped, sorted, unique.
+    No header: .k5login has no comment syntax. -#}
+{%- set ns = namespace(p=acct.k5login | default([])) -%}
+{%- for r in k5_src.results | default([]) -%}
+{%-   if r.item is defined and r.item[0].name == acct.name and r.content is defined -%}
+{%-     set ns.p = ns.p + (r.content | b64decode).splitlines() -%}
+{%-   endif -%}
+{%- endfor -%}
+{{ ns.p | map('trim') | reject('equalto', '') | reject('match', '#') | unique | sort | join('\n') }}

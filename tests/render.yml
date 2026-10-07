@@ -35,6 +35,14 @@
         - {item: mu2e-mc1-worker-03, rc: 0, stderr: ""}
     v_multi: {rc: 1, stdout_lines: ["mu2e-mc1-worker-02"]}
     v_sacct: {stdout_lines: ["17|COMPLETED"]}
+    # Fake slurped .k5login sources for roles/accounts/templates/k5login.j2.
+    acct: {name: mu2ebatch, k5login: ["extra@FNAL.GOV"], k5login_from: [mu2eshift, mu2edaq]}
+    k5_src:
+      results:
+        - {item: [{name: mu2ebatch}, mu2eshift], content: "{{ 'b@FNAL.GOV\n  a@FNAL.GOV\n\n# note\n' | b64encode }}"}
+        - {item: [{name: mu2ebatch}, mu2edaq], content: "{{ 'c@FNAL.GOV \na@FNAL.GOV\n' | b64encode }}"}
+        - {item: [{name: other}, mu2edaq], content: "{{ 'z@FNAL.GOV\n' | b64encode }}"}
+        - {item: [{name: mu2ebatch}, missing], failed: false, msg: "file not found"}
   tasks:
     - name: Output directory
       ansible.builtin.file:
@@ -54,6 +62,7 @@
         - {src: slurmdbd/templates/mariadb-slurmdbd.cnf.j2, dest: mariadb-slurmdbd.cnf}
         - {src: slurmd/templates/sysconfig-slurmd.j2, dest: sysconfig-slurmd}
         - {src: slurm_common/templates/logrotate-slurm.j2, dest: logrotate-slurm}
+        - {src: accounts/templates/k5login.j2, dest: k5login}
 
     - name: Render the validation results template
       ansible.builtin.copy:

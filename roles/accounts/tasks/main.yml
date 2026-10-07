@@ -44,17 +44,28 @@
   loop_control:
     label: "{{ item.name }}:{{ item.uid }}"
 
-- name: Kerberos principals allowed to log in as new job accounts
-  ansible.builtin.copy:
-    dest: "{{ item.home }}/.k5login"
-    content: "{{ item.k5login | join('\n') }}\n"
-    owner: "{{ item.name }}"
-    group: "{{ item.group }}"
+- name: Read the source accounts' .k5login files
+  ansible.builtin.slurp:
+    src: "{{ ansible_facts.getent_passwd[item.1][4] }}/.k5login"
+  loop: "{{ mc1_job_accounts | selectattr('create') | list | subelements('k5login_from', skip_missing=True) }}"
+  loop_control:
+    label: "{{ item.0.name }} <- {{ item.1 }}"
+  register: k5_src
+  when: item.1 in ansible_facts.getent_passwd
+  failed_when: false
+
+- name: .k5login for new job accounts (union of the sources plus k5login)
+  ansible.builtin.template:
+    src: k5login.j2
+    dest: "{{ acct.home }}/.k5login"
+    owner: "{{ acct.name }}"
+    group: "{{ acct.group }}"
     mode: "0644"
   loop: "{{ mc1_job_accounts | selectattr('create') | list }}"
   loop_control:
-    label: "{{ item.name }}"
-  when: item.k5login | default([]) | length > 0
+    loop_var: acct
+    label: "{{ acct.name }}"
+  when: (acct.k5login_from | default([]) | length > 0) or (acct.k5login | default([]) | length > 0)
   ignore_errors: "{{ ansible_check_mode }}"   # home does not exist yet in a first --check
 
 - name: Repair ownership of existing job-account home directories

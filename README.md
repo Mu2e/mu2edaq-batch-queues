@@ -26,8 +26,8 @@ scripts/mc1-slurm-deploy deploy --apply      # install
 scripts/mc1-slurm-deploy validate            # test jobs -> results/validate-<UTC>.json
 ```
 
-Before the first deploy, set `uid` for `mu2ebatch` in
-`config/group_vars/all.yml`. See [docs/INSTALL.md](docs/INSTALL.md).
+mu2ebatch is uid 51329, group mu2e (9914); its .k5login is the union of
+mu2eshift's and mu2edaq's on each node. See [docs/INSTALL.md](docs/INSTALL.md).
 
 ## Layout
 

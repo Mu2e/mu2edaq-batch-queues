@@ -119,3 +119,8 @@ def test_preflight_verdict_lists_all_failures(tmp_path, ansible_env):
     fail_msg = (tmp_path / "verdict-fail-case.txt").read_text().strip()
     assert fail_msg == "preflight failed on localhost: uid_set, slurm_query, slurm_version"
     assert (tmp_path / "verdict-pass-case.txt").read_text().strip() == "PASSED"
+
+
+def test_k5login_union(rendered):
+    # Sources trimmed, comments/blanks dropped, other accounts' sources ignored.
+    assert (rendered / "k5login").read_text() == "a@FNAL.GOV\nb@FNAL.GOV\nc@FNAL.GOV\nextra@FNAL.GOV\n"

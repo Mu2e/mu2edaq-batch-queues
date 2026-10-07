@@ -16,6 +16,7 @@
       uid_free: "{{ pf_c_uid_free | default({}) }}"
       gid_free: "{{ pf_c_gid_free | default({}) }}"
       accounts_present: "{{ pf_c_accounts | default({}) }}"
+      job_gid: "{{ pf_c_job_gid | default({}) }}"
       slurm_query: "{{ pf_slurm_version | default({}) }}"
       slurm_version: "{{ pf_c_slurm_version | default({}) }}"
       controller_reachable: "{{ pf_c_reach | default({}) }}"

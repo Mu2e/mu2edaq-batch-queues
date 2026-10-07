@@ -40,11 +40,15 @@ mc1_service_accounts:
 mc1_job_accounts:
   - name: mu2ebatch
     create: true
-    uid: null                 # REQUIRED before deploy
-    group: mu2e               # existing group, gid 9914
+    uid: 51329                # user's choice 2026-10-06; free on workers 01-03
+    group: mu2e
+    gid: 9914                 # preflight asserts group mu2e has this gid
     home: /home/mu2ebatch
     comment: Mu2e MC1 batch service account
-    k5login: []               # principals allowed to ssh in as mu2ebatch
+    # .k5login = union of these accounts' .k5login on the same node, plus
+    # any principals listed in k5login. Read at deploy time, never stored here.
+    k5login_from: [mu2eshift, mu2edaq]
+    k5login: []
   - name: mu2eshift
     create: false
     fix_home_ownership: true

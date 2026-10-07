@@ -101,7 +101,7 @@ mc1_ssh_user: root
 mc1_puppet_policy: fail            # fail | warn
 mc1_service_accounts: [{name: munge, uid: 450, gid: 450, ...}, {name: slurm, uid: 451, gid: 451, ...}]
 mc1_job_accounts:                  # create:true → new local account (uid REQUIRED)
-  - {name: mu2ebatch, create: true, uid: null, group: mu2e, k5login: []}
+  - {name: mu2ebatch, create: true, uid: 51329, group: mu2e, gid: 9914, k5login_from: [mu2eshift, mu2edaq]}
   - {name: mu2eshift, create: false, fix_home_ownership: true}
 slurm_ports: {slurmctld: 6817, slurmd: 6818, slurmdbd: 6819}
 slurm_future_nodelist: "mu2e-mc1-worker-[04-16]"
@@ -120,6 +120,6 @@ defects). Those belong in `docs/private/` and the private tracker.
 
 ## Testing
 
-`venv/bin/python -m pytest -q tests`: 26 tests, offline, about 13 s. Live
+`venv/bin/python -m pytest -q tests`: 28 tests, offline, about 10 s. Live
 validation on the cluster is `scripts/mc1-slurm-deploy validate`. Its JSON keys
 match the tracker's test-matrix rows.

@@ -150,6 +150,17 @@
   register: pf_c_accounts
   ignore_errors: true
 
+- name: Job-account groups have the configured gid
+  ansible.builtin.assert:
+    that: (ansible_facts.getent_group[item.group][1] | int) == (item.gid | int)
+    fail_msg: "group {{ item.group }} has gid {{ ansible_facts.getent_group[item.group][1] | default('none') }}, config says {{ item.gid }}"
+    quiet: true
+  loop: "{{ mc1_job_accounts | selectattr('create') | selectattr('gid', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.name }}:{{ item.group }}"
+  register: pf_c_job_gid
+  ignore_errors: true
+
 - name: Query the newest Slurm version in the enabled repositories
   ansible.builtin.shell: >-
     dnf -q --assumeno

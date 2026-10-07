@@ -76,3 +76,9 @@ def test_ports_distinct(cfg):
     assert len(set(ports.values())) == 3
     lo, hi = (int(x) for x in cfg["slurm_srun_port_range"].split("-"))
     assert lo < hi and not any(lo <= p <= hi for p in ports.values())
+
+
+def test_mu2ebatch_identity(cfg):
+    acct = next(a for a in cfg["mc1_job_accounts"] if a["name"] == "mu2ebatch")
+    assert (acct["uid"], acct["group"], acct["gid"]) == (51329, "mu2e", 9914)
+    assert acct["k5login_from"] == ["mu2eshift", "mu2edaq"]
