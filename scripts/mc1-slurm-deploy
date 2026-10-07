@@ -5,6 +5,7 @@ Actions:
   preflight   read-only checks on every cluster node
   deploy      full installation; --check --diff unless --apply is given
   storage     /scratch and /data-local only; --check --diff unless --apply
+  firewall    cluster firewalld zone only; --check --diff unless --apply
   validate    post-install test jobs; writes results/validate-<UTC>.json
 
 Override order (highest wins): command line > environment (MC1_*) > .env >
@@ -30,6 +31,7 @@ PLAYBOOKS = {
     "preflight": "playbooks/preflight.yml",
     "deploy": "playbooks/site.yml",
     "storage": "playbooks/storage.yml",
+    "firewall": "playbooks/firewall.yml",
     "validate": "playbooks/validate.yml",
 }
 # Environment variables with a dedicated Ansible variable.
@@ -118,7 +120,7 @@ def find_ansible_playbook() -> Optional[str]:
 def build_command(action: str, args: argparse.Namespace, extra_file: Optional[str],
                   exe: str) -> List[str]:
     cmd = [exe, str(ROOT / PLAYBOOKS[action])]
-    if action in ("deploy", "storage"):
+    if action in ("deploy", "storage", "firewall"):
         cmd += ["--diff"] if args.apply else ["--check", "--diff"]
     if args.limit:
         cmd += ["--limit", args.limit]

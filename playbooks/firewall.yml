@@ -1,0 +1,7 @@
+---
+# Cluster firewall zone only; the same role runs inside site.yml.
+- name: Cluster firewall zone
+  hosts: slurm_cluster
+  gather_facts: false
+  roles:
+    - firewall

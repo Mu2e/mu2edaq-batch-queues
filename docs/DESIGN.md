@@ -25,7 +25,7 @@ flowchart LR
 
 | Port | Listener | Opened to |
 |------|----------|-----------|
-| 6817/tcp | slurmctld (worker-01) | cluster nodes |
+| 6817/tcp | slurmctld (worker-01) | cluster nodes (zone `10_mc1_cluster`) |
 | 6818/tcp | slurmd (compute) | cluster nodes |
 | 6819/tcp | slurmdbd (worker-01) | loopback only |
 | 3306/tcp | MariaDB (worker-01) | loopback only (`bind-address=127.0.0.1`) |
@@ -45,6 +45,8 @@ flowchart LR
 | D9 | Packages from the SLAM-mirrored EPEL 9 | Signed and maintained through dnf. Preflight requires Slurm 22.05 or newer. |
 | D10 | Configless (`enable_configless`, `slurmd --conf-server`) | There is no shared filesystem, and one copy of `slurm.conf` cannot drift. |
 | D11 | Workers 04–16 declared `State=FUTURE` | Bringing a node online is an inventory move plus a re-run. |
+| D16 | Slurm traffic goes to the project's own firewalld zone `10_mc1_cluster`, whose sources are the cluster members' /32 addresses; it allows ssh, 6817, 6818 and 60001–63000 | SLAM Puppet owns the zones that would otherwise match (`50_FNAL`, target REJECT). Zones that match by source are dispatched in name order, so `10_` wins. A Puppet `--noop` run on 2026-10-07 showed no changes. |
+| D17 | A running Puppet agent is a preflight warning, not a failure | SLAM Puppet manages only root, its own packages and services, and firewalld; it does not touch slurm, munge, MariaDB or local users. |
 
 ## Mechanisms
 

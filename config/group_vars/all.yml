@@ -14,7 +14,9 @@ mc1_dnf_disablerepo:                        # repos skipped by every dnf call
   - libnvidia-container                     # metadata GPG check fails (2026-10-06)
 
 # ------------------------------------------------------------- preflight ----
-mc1_puppet_policy: fail        # fail | warn when a Puppet/OpenVox agent is active
+mc1_puppet_policy: warn        # fail | warn when a Puppet/OpenVox agent is active
+                               # warn: SLAM Puppet runs everywhere but manages only root,
+                               # its own packages/services and firewalld (user, 2026-10-07)
 mc1_max_clock_offset_s: 1.0    # chrony offset limit; munge rejects skew > ~5 min
 
 # -------------------------------------------------------------- accounts ----
@@ -113,7 +115,10 @@ mc1_local_volumes:
   - {lv: data_local, mount: /data-local, size: 500G, label: data-local, owner: root, group: mu2e, mode: "1777"}
 
 # --------------------------------------------------------------- firewall ---
-# Applied only where firewalld is active. Sources are the inventory nodes'
-# addresses; nothing outside the cluster is opened.
+# Applied only where firewalld is active: an own zone whose sources are the
+# slurm_cluster members' addresses (see roles/firewall). Nothing outside the
+# cluster is opened.
 mc1_manage_firewall: true
-mc1_cluster_addrs: []          # empty = inventory nodes' default IPv4 addresses
+mc1_fw_zone: 10_mc1_cluster    # sorts before Puppet's 50_FNAL
+mc1_fw_services: [ssh]         # members' traffic leaves 50_FNAL, so keep ssh
+mc1_cluster_addrs: []          # empty = resolve slurm_cluster hosts on each node

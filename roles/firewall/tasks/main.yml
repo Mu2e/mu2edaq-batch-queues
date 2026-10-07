@@ -1,8 +1,15 @@
 ---
-# Open the Slurm ports to cluster members only, and only where firewalld runs.
-#   controller : slurmctld port + srun port range (slurmstepd connects back to srun)
-#   compute    : slurmd port (controller and peer slurmd tree fan-out)
-# slurmdbd and MariaDB stay closed: both are used over loopback.
+# Slurm traffic between cluster members goes to a zone this project owns.
+#
+# On the MC1 workers SCD's SLAM Puppet manages firewalld: worker addresses
+# (131.225.0.0/16) match ipset fnal_ipv4 and land in zone 50_FNAL (target
+# REJECT), whose zone files Puppet rewrites. Rules added there would be
+# reverted, and rules in the default zone (99_public) never match.
+#
+# firewalld dispatches source-matched zones in name order, so the zone
+# 10_mc1_cluster, with the cluster members' /32 addresses as sources,
+# claims that traffic before 50_FNAL. It allows ssh plus the Slurm ports,
+# and only from those addresses. Puppet does not manage this zone.
 
 - name: Collect service states
   ansible.builtin.service_facts:
@@ -13,36 +20,65 @@
       {{ (mc1_manage_firewall | bool) and
          (ansible_facts.services['firewalld.service'] | default({})).get('state', 'absent') == 'running' }}
 
+- name: Resolve cluster member addresses on the node
+  ansible.builtin.command: getent ahostsv4 {{ item }}
+  loop: "{{ groups['slurm_cluster'] }}"
+  register: fw_resolved
+  changed_when: false
+  check_mode: false
+  when: (fw_active | bool) and mc1_cluster_addrs | length == 0
+
 - name: Cluster member addresses
   ansible.builtin.set_fact:
     fw_sources: >-
       {{ mc1_cluster_addrs if mc1_cluster_addrs | length > 0 else
-         (groups['slurm_cluster'] | map('extract', hostvars, ['ansible_facts', 'default_ipv4', 'address']) | list) }}
+         (fw_resolved.results | map(attribute='stdout_lines') | map('first') | map('split') | map('first') | unique | list) }}
   when: fw_active | bool
 
-- name: Ports this node must accept from cluster members
-  ansible.builtin.set_fact:
-    fw_ports: >-
-      {{ [slurm_ports.slurmctld | string, slurm_srun_port_range]
-         if inventory_hostname in groups['slurm_controller']
-         else [slurm_ports.slurmd | string] }}
-  when: fw_active | bool
-
-- name: Default firewalld zone
-  ansible.builtin.command: firewall-cmd --get-default-zone
-  register: fw_zone
-  changed_when: false
-  check_mode: false
-  when: fw_active | bool
-
-- name: Rich rules, one per (source, port)
+- name: Cluster zone exists (permanent)
   ansible.posix.firewalld:
-    zone: "{{ fw_zone.stdout | trim }}"
-    rich_rule: 'rule family="ipv4" source address="{{ item.0 }}" port port="{{ item.1 }}" protocol="tcp" accept'
+    zone: "{{ mc1_fw_zone }}"
+    state: present
+    permanent: true
+  register: fw_zone_created
+  when: fw_active | bool
+
+- name: Load the new zone into the running firewall
+  ansible.builtin.command: firewall-cmd --reload
+  when: (fw_active | bool) and fw_zone_created is changed and not ansible_check_mode
+
+- name: Cluster members are the zone's sources
+  ansible.posix.firewalld:
+    zone: "{{ mc1_fw_zone }}"
+    source: "{{ item }}/32"
     permanent: true
     immediate: true
     state: enabled
-  loop: "{{ fw_sources | product(fw_ports) | list }}"
-  loop_control:
-    label: "{{ item.0 }} -> {{ item.1 }}/tcp"
+  loop: "{{ fw_sources | default([]) }}"
   when: fw_active | bool
+  ignore_errors: "{{ ansible_check_mode }}"   # zone not loaded yet in a first --check
+
+- name: Services open to cluster members
+  ansible.posix.firewalld:
+    zone: "{{ mc1_fw_zone }}"
+    service: "{{ item }}"
+    permanent: true
+    immediate: true
+    state: enabled
+  loop: "{{ mc1_fw_services }}"
+  when: fw_active | bool
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: Slurm ports open to cluster members
+  ansible.posix.firewalld:
+    zone: "{{ mc1_fw_zone }}"
+    port: "{{ item }}"
+    permanent: true
+    immediate: true
+    state: enabled
+  loop:
+    - "{{ slurm_ports.slurmctld }}/tcp"
+    - "{{ slurm_ports.slurmd }}/tcp"
+    - "{{ slurm_srun_port_range }}/tcp"
+  when: fw_active | bool
+  ignore_errors: "{{ ansible_check_mode }}"
