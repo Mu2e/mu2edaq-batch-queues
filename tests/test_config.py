@@ -91,3 +91,10 @@ def test_local_volumes(cfg):
     assert all("-" not in v["lv"] for v in vols.values())
     total_gib = sum(int(v["size"].rstrip("G")) for v in vols.values())
     assert total_gib <= 710, "must fit in os_vg free space surveyed 2026-10-07"
+
+
+def test_nfs_host_volumes():
+    for host, lv, mount in (("17", "nfshome", "/nfshome"), ("18", "nfsdata", "/nfsdata")):
+        hv = yaml.safe_load((ROOT / "config" / "host_vars" / ("mu2e-mc1-worker-%s.fnal.gov.yml" % host)).read_text())
+        vols = hv["mc1_host_volumes"]
+        assert [(v["lv"], v["mount"], v["size"]) for v in vols] == [(lv, mount, "100%FREE")]

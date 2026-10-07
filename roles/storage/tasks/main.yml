@@ -1,6 +1,7 @@
 ---
-# Local LVM volumes (e.g. /scratch, /data-local) carved from free space in
-# mc1_local_vg. Idempotent: an existing LV, filesystem or mount is left alone.
+# Local LVM volumes carved from free space in mc1_local_vg: the common
+# mc1_local_volumes (/scratch, /data-local) plus per-host mc1_host_volumes
+# (host_vars). A size of 100%FREE takes whatever remains and is created last. Idempotent: an existing LV, filesystem or mount is left alone.
 # Never shrinks, never reformats, never mounts over a non-empty directory.
 
 - name: Free space in the volume group (MiB)
@@ -19,18 +20,31 @@
   environment:
     LVM_SUPPRESS_FD_WARNINGS: "1"
 
-- name: Work out which volumes are missing
+- name: Work out which volumes are missing (fixed sizes first, 100%FREE last)
   ansible.builtin.set_fact:
-    st_missing: "{{ mc1_local_volumes | rejectattr('lv', 'in', st_lvs.stdout.split()) | list }}"
+    st_volumes: "{{ mc1_local_volumes + (mc1_host_volumes | default([])) }}"
+    st_missing: >-
+      {{ (mc1_local_volumes + (mc1_host_volumes | default([])))
+         | rejectattr('lv', 'in', st_lvs.stdout.split())
+         | rejectattr('size', 'equalto', '100%FREE') | list
+         + ((mc1_local_volumes + (mc1_host_volumes | default([])))
+         | rejectattr('lv', 'in', st_lvs.stdout.split())
+         | selectattr('size', 'equalto', '100%FREE') | list) }}
 
 - name: Enough free space for the missing volumes
   ansible.builtin.assert:
-    that: (st_vgfree.stdout | trim | float) >= (st_missing | map(attribute='size') | map('human_to_bytes') | sum / 1048576)
+    that:
+      - (st_vgfree.stdout | trim | float) >= (st_fixed_mib | float) + (1024 if st_fill | length > 0 else 0)
+      - st_fill | length <= 1
     fail_msg: >-
       {{ mc1_local_vg }} has {{ st_vgfree.stdout | trim }} MiB free; missing volumes
       {{ st_missing | map(attribute='lv') | list }} need
-      {{ (st_missing | map(attribute='size') | map('human_to_bytes') | sum / 1048576) | int }} MiB
+      {{ st_fixed_mib | int }} MiB{{ ' plus >= 1 GiB for 100%FREE' if st_fill else '' }}
+      (at most one 100%FREE volume per host)
     quiet: true
+  vars:
+    st_fill: "{{ st_missing | selectattr('size', 'equalto', '100%FREE') | list }}"
+    st_fixed_mib: "{{ st_missing | rejectattr('size', 'equalto', '100%FREE') | map(attribute='size') | map('human_to_bytes') | sum / 1048576 }}"
 
 - name: A mount point already in use must be mounted from our volume
   ansible.builtin.assert:
@@ -39,7 +53,7 @@
       | difference(['/dev/mapper/' ~ mc1_local_vg ~ '-' ~ item.lv]) | length == 0
     fail_msg: "{{ item.mount }} is already mounted from another device; not touching it"
     quiet: true
-  loop: "{{ mc1_local_volumes }}"
+  loop: "{{ st_volumes }}"
   loop_control:
     label: "{{ item.mount }}"
 
@@ -48,7 +62,7 @@
     paths: "{{ item.mount }}"
     hidden: true
     file_type: any
-  loop: "{{ mc1_local_volumes }}"
+  loop: "{{ st_volumes }}"
   loop_control:
     label: "{{ item.mount }}"
   register: st_content
@@ -64,7 +78,9 @@
     label: "{{ item.item.mount }}"
 
 - name: Create logical volumes
-  ansible.builtin.command: lvcreate -y -n {{ item.lv }} -L {{ item.size }} {{ mc1_local_vg }}
+  ansible.builtin.command: >-
+    lvcreate -y -n {{ item.lv }}
+    {{ '-l 100%FREE' if item.size == '100%FREE' else '-L ' ~ item.size }} {{ mc1_local_vg }}
   loop: "{{ st_missing }}"
   loop_control:
     label: "{{ mc1_local_vg }}/{{ item.lv }} {{ item.size }}"
@@ -73,7 +89,7 @@
 
 - name: Existing filesystem type on each volume
   ansible.builtin.command: blkid -o value -s TYPE /dev/{{ mc1_local_vg }}/{{ item.lv }}
-  loop: "{{ mc1_local_volumes }}"
+  loop: "{{ st_volumes }}"
   loop_control:
     label: "{{ item.lv }}"
   register: st_fstype
@@ -95,7 +111,7 @@
     fstype: "{{ item.fstype | default('xfs') }}"
     opts: defaults,nofail
     state: mounted
-  loop: "{{ mc1_local_volumes }}"
+  loop: "{{ st_volumes }}"
   loop_control:
     label: "{{ item.mount }}"
   ignore_errors: "{{ ansible_check_mode }}"
@@ -107,6 +123,6 @@
     owner: "{{ item.owner }}"
     group: "{{ item.group }}"
     mode: "{{ item.mode }}"
-  loop: "{{ mc1_local_volumes }}"
+  loop: "{{ st_volumes }}"
   loop_control:
     label: "{{ item.mount }} {{ item.owner }}:{{ item.group }} {{ item.mode }}"

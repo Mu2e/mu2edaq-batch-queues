@@ -1,0 +1,4 @@
+# Host-only volumes, created after the common mc1_local_volumes.
+# size: 100%FREE takes all remaining space in mc1_local_vg (xfs cannot shrink).
+mc1_host_volumes:
+  - {lv: nfshome, mount: /nfshome, size: 100%FREE, label: nfshome, owner: root, group: root, mode: "0755"}
