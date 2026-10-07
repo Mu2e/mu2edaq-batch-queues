@@ -1,10 +1,13 @@
 ---
 # Full deployment. Order matters:
 #   1. preflight            facts for every node; abort before any change
-#   2. accounts, munge      fixed UID/GID before RPM scriptlets; one shared key
-#   3. controller           packages, firewall, slurmdbd, then slurmctld
-#   4. compute              packages, firewall, slurmd (needs slurmctld up)
+#   2. storage              /scratch and /data-local LVs
+#   3. accounts, munge      fixed UID/GID before RPM scriptlets; one shared key
+#   4. controller           packages, firewall, slurmdbd, then slurmctld
+#   5. compute              packages, firewall, slurmd (needs slurmctld up)
 - import_playbook: preflight.yml
+
+- import_playbook: storage.yml
 
 - name: Accounts and MUNGE on every node
   hosts: slurm_cluster

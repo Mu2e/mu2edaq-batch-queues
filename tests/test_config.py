@@ -82,3 +82,12 @@ def test_mu2ebatch_identity(cfg):
     acct = next(a for a in cfg["mc1_job_accounts"] if a["name"] == "mu2ebatch")
     assert (acct["uid"], acct["group"], acct["gid"]) == (51329, "mu2e", 9914)
     assert acct["k5login_from"] == ["mu2eshift", "mu2edaq"]
+
+
+def test_local_volumes(cfg):
+    vols = {v["mount"]: v for v in cfg["mc1_local_volumes"]}
+    assert vols["/scratch"]["size"] == "100G" and vols["/data-local"]["size"] == "500G"
+    # LV names without hyphens: device-mapper would double them.
+    assert all("-" not in v["lv"] for v in vols.values())
+    total_gib = sum(int(v["size"].rstrip("G")) for v in vols.values())
+    assert total_gib <= 710, "must fit in os_vg free space surveyed 2026-10-07"

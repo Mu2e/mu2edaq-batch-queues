@@ -1,0 +1,7 @@
+---
+# Local volumes only (/scratch, /data-local); also imported by site.yml.
+- name: Local LVM volumes
+  hosts: mc1_workers
+  gather_facts: true
+  roles:
+    - storage

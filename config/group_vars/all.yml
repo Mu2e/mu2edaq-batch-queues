@@ -104,6 +104,14 @@ slurmdbd_purge:
   PurgeTXNAfter: 12months
   PurgeUsageAfter: 24months
 
+# ---------------------------------------------------------------- storage ---
+# Local volumes carved from free space in mc1_local_vg (os_vg had 710.85 GiB
+# free on workers 01-03, 2026-10-07). Sizes use LVM units (G = GiB).
+mc1_local_vg: os_vg
+mc1_local_volumes:
+  - {lv: scratch,    mount: /scratch,    size: 100G, label: scratch,    owner: root, group: mu2e, mode: "1777"}
+  - {lv: data_local, mount: /data-local, size: 500G, label: data-local, owner: root, group: mu2e, mode: "1777"}
+
 # --------------------------------------------------------------- firewall ---
 # Applied only where firewalld is active. Sources are the inventory nodes'
 # addresses; nothing outside the cluster is opened.

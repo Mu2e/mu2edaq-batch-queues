@@ -65,3 +65,19 @@ scripts/mc1-slurm-deploy validate          # writes results/validate-<UTC>.json
    longer covers NN.
 3. Run `scripts/mc1-slurm-deploy deploy`, review the diff, then rerun with
    `--apply`.
+
+## Local volumes (/scratch, /data-local)
+
+`mc1_local_volumes` in `config/group_vars/all.yml` defines LVs carved from
+`os_vg` on every host in `mc1_workers` (workers 01–18): `scratch` 100G on
+`/scratch` and `data_local` 500G on `/data-local`, both xfs, `root:mu2e 1777`,
+fstab `defaults,nofail`. The role never shrinks, reformats or mounts over a
+non-empty directory or a different device.
+
+```sh
+scripts/mc1-slurm-deploy storage            # dry run
+scripts/mc1-slurm-deploy storage --apply
+```
+
+Grow later with `lvextend -r -L +50G os_vg/data_local`, then update the size in
+the config.

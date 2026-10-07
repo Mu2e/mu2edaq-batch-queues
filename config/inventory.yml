@@ -12,6 +12,11 @@ all:
     ansible_user: "{{ mc1_ssh_user }}"
     ansible_ssh_common_args: "-o ProxyJump={{ mc1_jump }}"
   children:
+    # Every MC1 worker, for host-level roles such as storage. All 18 answered
+    # on 2026-10-07. Slurm membership is the separate slurm_cluster group.
+    mc1_workers:
+      hosts:
+        mu2e-mc1-worker-[01:18].fnal.gov:
     slurm_cluster:
       children:
         slurm_controller:

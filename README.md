@@ -34,8 +34,8 @@ mu2eshift's and mu2edaq's on each node. See [docs/INSTALL.md](docs/INSTALL.md).
 ```
 config/   inventory.yml              controller and compute groups
           group_vars/all.yml         every setting (accounts, ports, partitions, slurmdbd)
-playbooks/ preflight.yml site.yml validate.yml
-roles/    preflight accounts munge slurm_common firewall slurmdbd slurmctld slurmd
+playbooks/ preflight.yml storage.yml site.yml validate.yml
+roles/    preflight storage accounts munge slurm_common firewall slurmdbd slurmctld slurmd
 scripts/  mc1-slurm-deploy           wrapper: CLI > env > .env > config overrides
           mc1-slurm-presurvey        read-only host survey over ssh
 man/      man1/                      man pages for every script
