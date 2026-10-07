@@ -50,6 +50,7 @@
     state: present
     disable_gpg_check: true      # our own unsigned build, copied over ssh
     disablerepo: "{{ mc1_dnf_disablerepo }}"
+  ignore_errors: "{{ ansible_check_mode }}"   # RPMs are not copied in --check
 
 - name: Lock Slurm at this build so EPEL's slurm can never replace it
   ansible.builtin.shell: |

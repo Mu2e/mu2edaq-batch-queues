@@ -7,9 +7,12 @@ mkdir -p $B/src $B/el9 $B/el10
 cd $B/src
 [ -f slurm-$V.tar.bz2 ] || curl -sfLO https://download.schedmd.com/slurm/slurm-$V.tar.bz2
 sha256sum slurm-$V.tar.bz2 | tee $B/src/SHA256
+# quay.io has no almalinux:10 tag; Docker Hub carries both.
+declare -A IMAGE=([9]=quay.io/almalinux/almalinux:9 [10]=docker.io/library/almalinux:10)
 for el in 9 10; do
-  echo "=== EL$el build start $(date -u +%T)"
-  podman run --rm -v $B:/b quay.io/almalinux/almalinux:$el bash -c "
+  if ls $B/el$el/slurm-$V-*.rpm >/dev/null 2>&1; then echo "=== EL$el: RPMs for $V already built"; continue; fi
+  echo "=== EL$el build start $(date -u +%T) (${IMAGE[$el]})"
+  podman run --rm -v $B:/b ${IMAGE[$el]} bash -c "
     set -e
     dnf -y -q install dnf-plugins-core epel-release >/dev/null
     dnf config-manager --set-enabled crb

@@ -98,7 +98,7 @@ def test_validate_results(rendered):
     assert c["sacct_records"] == ["17|COMPLETED"]
 
 
-@pytest.mark.parametrize("playbook", ["preflight.yml", "site.yml", "storage.yml", "firewall.yml", "validate.yml"])
+@pytest.mark.parametrize("playbook", ["preflight.yml", "site.yml", "storage.yml", "firewall.yml", "accounts.yml", "validate.yml"])
 def test_playbook_syntax(playbook, ansible_env):
     exe = ansible_bin("ansible-playbook")
     if exe is None:

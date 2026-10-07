@@ -1,0 +1,7 @@
+---
+# Accounts only (slurm, munge, mu2ebatch and its .k5login); also in site.yml.
+- name: Accounts
+  hosts: slurm_cluster
+  gather_facts: false
+  roles:
+    - accounts

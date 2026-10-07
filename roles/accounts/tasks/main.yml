@@ -13,6 +13,7 @@
   failed_when: false
   check_mode: false
 
+# passwd fields: 0 name, 1 pw, 2 uid, 3 gid, 4 gecos, 5 home, 6 shell
 - name: Index them (name -> passwd fields)
   ansible.builtin.set_fact:
     acct_passwd: >-
@@ -58,12 +59,12 @@
 
 - name: Read the source accounts' .k5login files
   ansible.builtin.slurp:
-    src: "{{ acct_passwd[item.1][4] }}/.k5login"
+    src: "{{ acct_passwd[item.1][5] }}/.k5login"
   loop: "{{ mc1_job_accounts | selectattr('create') | list | subelements('k5login_from', skip_missing=True) }}"
   loop_control:
     label: "{{ item.0.name }} <- {{ item.1 }}"
   register: k5_src
-  when: item.1 in acct_passwd
+  when: item.1 in acct_passwd and acct_passwd[item.1][5] is match('^/')
   failed_when: false
 
 - name: .k5login for new job accounts (union of the sources plus k5login)
@@ -82,11 +83,11 @@
 
 - name: Repair ownership of existing job-account home directories
   ansible.builtin.file:
-    path: "{{ acct_passwd[item.name][4] }}"
+    path: "{{ acct_passwd[item.name][5] }}"
     state: directory
     owner: "{{ item.name }}"
-    group: "{{ acct_passwd[item.name][2] }}"
+    group: "{{ acct_passwd[item.name][3] }}"
   loop: "{{ mc1_job_accounts | rejectattr('create') | selectattr('fix_home_ownership', 'defined') | selectattr('fix_home_ownership') | list }}"
   loop_control:
     label: "{{ item.name }}"
-  when: item.name in acct_passwd
+  when: item.name in acct_passwd and acct_passwd[item.name][5] is match('^/')   # never a relative path
