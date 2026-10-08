@@ -40,6 +40,19 @@ A job writes its output on the compute node that ran it, not on worker-01.
 - To stage an input file to every allocated node, use `sbcast` inside the job
   script. See the example below.
 
+## Software: CVMFS
+
+`/cvmfs/mu2e.opensciencegrid.org` is mounted on every node (read-only,
+cached per node). Use the full path, since `ls /cvmfs` can look empty before
+first access. Set up the environment inside the job script:
+
+```bash
+source /cvmfs/mu2e.opensciencegrid.org/setupmu2e-art.sh
+```
+
+Check every compute node:
+`srun -N17 --chdir=/tmp bash -c 'ls /cvmfs/mu2e.opensciencegrid.org >/dev/null && echo "$(hostname -s) ok"' | sort`
+
 ## Smoke tests
 
 ```sh

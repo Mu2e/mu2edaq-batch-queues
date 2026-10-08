@@ -84,14 +84,19 @@ the config.
 
 ## CVMFS (/cvmfs/mu2e.opensciencegrid.org)
 
-The `cvmfs` role installs the CernVM-FS client on every worker (01–18) and
-mounts each repository in `mc1_cvmfs_repositories` at `/cvmfs/<repo>` from
-`/etc/fstab`. It is also part of `deploy`.
+CVMFS is already installed on the workers by the site installation, so the
+`cvmfs` role is off (`mc1_cvmfs_enabled: false`) and `deploy` skips it.
+`validate` still lists every repository in `mc1_cvmfs_repositories` from a
+job on each compute node (`cvmfs_in_job`).
+
+The role is kept for a node that lacks CVMFS. It installs the client and
+mounts each repository at `/cvmfs/<repo>` from `/etc/fstab`; enable it per
+host, never on a node that already has a site CVMFS configuration:
 
 ```sh
 scripts/mc1-cvmfs-fetch-rpms                  # once per release: RPMs -> artifacts/rpms/cvmfs/<ver>/
-scripts/mc1-slurm-deploy cvmfs                # dry run; runs the guards and reachability check
-scripts/mc1-slurm-deploy cvmfs --apply
+scripts/mc1-slurm-deploy cvmfs --set mc1_cvmfs_enabled=true --limit <host>            # dry run
+scripts/mc1-slurm-deploy cvmfs --set mc1_cvmfs_enabled=true --limit <host> --apply
 scripts/mc1-slurm-deploy validate             # cvmfs_in_job: every repo listed from a job on each node
 ```
 

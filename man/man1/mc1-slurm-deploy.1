@@ -89,8 +89,10 @@ CVMFS, if autofs owns
 or if the cache filesystem cannot hold
 .BR mc1_cvmfs_quota_mb ;
 it also reports whether the WPAD (or the configured proxy) and a stratum 1
-answer, and stops if neither does. Also part of
-.BR deploy .
+answer, and stops if neither does. Inert unless
+.B mc1_cvmfs_enabled
+is true; it is false because the site already installs CVMFS on the MC1
+workers, and the role must not overwrite that configuration.
 .PP
 Every action except
 .B preflight

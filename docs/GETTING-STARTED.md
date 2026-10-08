@@ -18,7 +18,8 @@ The MC-1 cluster runs **Slurm 26.05** on the Mu2e trigger workers
 | Workers 17–18 | 32 CPUs (16 cores × 2 threads), about 60 GB of memory for jobs |
 | Time limit | none set; always give `--time` anyway |
 
-Every command in this guide was run on the cluster on 2026-10-08.
+Every command in this guide was run on the cluster on 2026-10-08, except the
+CVMFS examples in section 3, which were added afterwards.
 
 ---
 
@@ -97,8 +98,9 @@ account's `~/.k5login`.
 
 ## 3. Available disk areas
 
-**Every disk area is local to one node.** There is no shared filesystem yet.
-A file written on worker-05 exists only on worker-05.
+**Every writable disk area is local to one node.** There is no shared
+filesystem yet. A file written on worker-05 exists only on worker-05. The
+one area that is the same everywhere is `/cvmfs`, which is read-only.
 
 | Path | Where | Size | Use it for |
 |---|---|---|---|
@@ -106,6 +108,7 @@ A file written on worker-05 exists only on worker-05.
 | `/scratch` | every node | 100 GB | Temporary files while a job runs |
 | `/data-local` | every node | 500 GB | Job output until you collect it |
 | `/tmp` | every node | 50 GB | Small temporary files |
+| `/cvmfs/mu2e.opensciencegrid.org` | every node | read-only | Mu2e software releases (see below) |
 | `/nfshome` | worker-17 only | 2.9 TB | Shared home area **once NFS is enabled** |
 | `/nfsdata` | worker-18 only | 2.9 TB | Shared data area **once NFS is enabled** |
 
@@ -118,6 +121,42 @@ A file written on worker-05 exists only on worker-05.
 - **Shared areas are coming.** `/nfshome` and `/nfsdata` will be mounted on
   every worker once NFS service is approved. Until then, use the collection
   methods in section 5.
+
+### Mu2e software: CVMFS
+
+The Mu2e software releases are served by CVMFS at
+`/cvmfs/mu2e.opensciencegrid.org`. It is mounted on every node, including the
+submit node, so a job sees the same software wherever it runs. It is
+read-only, and files are fetched and cached on the node the first time they are
+read. The first job on a node can therefore take a few seconds longer to
+start.
+
+- **Always use the full path.** `ls /cvmfs` can look empty, because a
+  repository is mounted when it is first accessed. `ls
+  /cvmfs/mu2e.opensciencegrid.org` mounts it.
+- **Set up the environment in the job**, not only in your login shell. Each
+  job starts with a clean environment on the compute node:
+
+```bash
+#!/bin/bash
+#SBATCH --job-name=mu2e-sim
+#SBATCH --cpus-per-task=1
+#SBATCH --mem=4G
+#SBATCH --time=02:00:00
+#SBATCH --chdir=/scratch
+#SBATCH --output=/data-local/%u/%x-%j.out
+
+source /cvmfs/mu2e.opensciencegrid.org/setupmu2e-art.sh
+# then select your release as usual (muse setup …), and run mu2e
+mu2e -c my_job.fcl -n 100
+```
+
+**Check that CVMFS is visible from every compute node:**
+
+```sh
+srun -N17 --chdir=/tmp bash -c \
+  'ls /cvmfs/mu2e.opensciencegrid.org >/dev/null && echo "$(hostname -s) ok"' | sort
+```
 
 ---
 

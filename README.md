@@ -27,7 +27,8 @@ scripts/mc1-slurm-deploy validate            # test jobs -> results/validate-<UT
 ```
 
 CVMFS (`/cvmfs/mu2e.opensciencegrid.org`, `/cvmfs/fermilab.opensciencegrid.org`):
-`scripts/mc1-cvmfs-fetch-rpms`, then `scripts/mc1-slurm-deploy cvmfs [--apply]`.
+provided by the site installation; `validate` checks both from jobs. The
+`cvmfs` role (off by default) only serves nodes that lack CVMFS.
 
 mu2ebatch is uid 51329, group mu2e (9914); its .k5login is the union of
 mu2eshift's and mu2edaq's on each node. See [docs/INSTALL.md](docs/INSTALL.md).

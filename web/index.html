@@ -96,6 +96,7 @@ footer .inner{max-width:1080px;margin:0 auto;padding:18px 20px 28px;display:flex
     <li><a href="#access">1 · Cluster access</a></li>
     <li><a href="#accounts">2 · Login accounts</a></li>
     <li><a href="#disks">3 · Disk areas</a></li>
+    <li><a href="#cvmfs">3a · CVMFS software</a></li>
     <li><a href="#submit">4 · Submitting jobs</a></li>
     <li><a href="#retrieve">5 · Getting data back</a></li>
     <li><a href="#about">About</a></li>
@@ -153,7 +154,7 @@ klist</pre></div></div>
 
 <section id="disks">
   <h2><span class="n">03</span>Available disk areas</h2>
-  <p class="note"><b>Every disk area is local to one node.</b> There is no shared filesystem yet: a file written on worker-05 exists only on worker-05.</p>
+  <p class="note"><b>Every writable disk area is local to one node.</b> There is no shared filesystem yet: a file written on worker-05 exists only on worker-05. The one area that is the same everywhere is <code>/cvmfs</code>, which is read-only.</p>
   <div class="tbl"><table>
     <thead><tr><th>Path</th><th>Where</th><th>Size</th><th>Use it for</th></tr></thead>
     <tbody>
@@ -161,6 +162,7 @@ klist</pre></div></div>
       <tr><td><code>/scratch</code></td><td>every node</td><td>100 GB</td><td>Temporary files while a job runs</td></tr>
       <tr><td><code>/data-local</code></td><td>every node</td><td>500 GB</td><td>Job output until you collect it</td></tr>
       <tr><td><code>/tmp</code></td><td>every node</td><td>50 GB</td><td>Small temporary files</td></tr>
+      <tr><td><code>/cvmfs/mu2e.opensciencegrid.org</code></td><td>every node</td><td>read-only</td><td>Mu2e software releases (see below)</td></tr>
       <tr><td><code>/nfshome</code></td><td>worker-17 only</td><td>2.9 TB</td><td>Shared home area, <b>once NFS is enabled</b></td></tr>
       <tr><td><code>/nfsdata</code></td><td>worker-18 only</td><td>2.9 TB</td><td>Shared data area, <b>once NFS is enabled</b></td></tr>
     </tbody>
@@ -168,6 +170,27 @@ klist</pre></div></div>
   <p>Work under your own directory, <code>/scratch/$USER</code> and <code>/data-local/$USER</code>. This creates both on every node:</p>
   <div class="cmd"><pre>srun -N17 --chdir=/tmp mkdir -p /data-local/$USER /scratch/$USER</pre></div>
   <p>Nothing is backed up or cleaned automatically. Collect your results, then delete what you no longer need.</p>
+
+  <h3 id="cvmfs">Mu2e software: CVMFS</h3>
+  <p>The Mu2e software releases are served by CVMFS at <code>/cvmfs/mu2e.opensciencegrid.org</code>. It is mounted on every node, including the submit node, so a job sees the same software wherever it runs. It is read-only, and files are fetched and cached on the node the first time they are read. The first job on a node can therefore take a few seconds longer to start.</p>
+  <ul>
+    <li><b>Always use the full path.</b> <code>ls /cvmfs</code> can look empty, because a repository is mounted when it is first accessed. <code>ls /cvmfs/mu2e.opensciencegrid.org</code> mounts it.</li>
+    <li><b>Set up the environment in the job,</b> not only in your login shell. Each job starts with a clean environment on the compute node:</li>
+  </ul>
+  <div class="cmd"><pre>#!/bin/bash
+#SBATCH --job-name=mu2e-sim
+#SBATCH --cpus-per-task=1
+#SBATCH --mem=4G
+#SBATCH --time=02:00:00
+#SBATCH --chdir=/scratch
+#SBATCH --output=/data-local/%u/%x-%j.out
+
+source /cvmfs/mu2e.opensciencegrid.org/setupmu2e-art.sh
+# then select your release as usual (muse setup …), and run mu2e
+mu2e -c my_job.fcl -n 100</pre></div>
+  <p>Check that CVMFS is visible from every compute node:</p>
+  <div class="cmd"><pre>srun -N17 --chdir=/tmp bash -c \
+  'ls /cvmfs/mu2e.opensciencegrid.org &gt;/dev/null &amp;&amp; echo "$(hostname -s) ok"' | sort</pre></div>
 </section>
 
 <section id="submit">
@@ -272,7 +295,7 @@ rsync -av -e "ssh -J mu2eshift@g2gateway01.fnal.gov" \
 
 <section id="about">
   <h2><span class="n">··</span>About</h2>
-  <p>Slurm 26.05.4, built from SchedMD source for AlmaLinux 9 and 10, with MUNGE authentication and slurmdbd/MariaDB accounting on worker-01. The configuration is managed with Ansible in <code>Mu2e/mu2edaq-batch-queues</code>, which also holds the full user guide (<code>docs/GETTING-STARTED.md</code>, plus a PDF) and the operator documentation.</p>
+  <p>Mu2e software comes from CVMFS (<code>/cvmfs/mu2e.opensciencegrid.org</code>), provided on every node by the site installation. Slurm 26.05.4, built from SchedMD source for AlmaLinux 9 and 10, with MUNGE authentication and slurmdbd/MariaDB accounting on worker-01. The configuration is managed with Ansible in <code>Mu2e/mu2edaq-batch-queues</code>, which also holds the full user guide (<code>docs/GETTING-STARTED.md</code>, plus a PDF) and the operator documentation.</p>
   <p>For cluster or account problems, contact the Mu2e DAQ experts. Include the job id and the output of <code>scontrol show job &lt;id&gt;</code>.</p>
   <p>This page is a single self-contained HTML file with no external dependencies, so any static web server can host it.</p>
 </section>

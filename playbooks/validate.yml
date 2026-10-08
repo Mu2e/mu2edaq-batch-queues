@@ -83,7 +83,7 @@
       register: v_cvmfs
       changed_when: false
       failed_when: false
-      when: mc1_cvmfs_enabled | bool
+      when: mc1_cvmfs_repositories | default([]) | length > 0
 
     - name: Accounting records for the sbatch jobs
       ansible.builtin.command: >-

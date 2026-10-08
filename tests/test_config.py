@@ -119,3 +119,4 @@ def test_cvmfs_config(cfg):
     opts = cfg["mc1_cvmfs_mount_options"].split(",")
     assert "_netdev" in opts and "nofail" in opts, "a dead squid must not hang boot"
     assert cfg["mc1_cvmfs_config_repository"] == "", "static mounts: no config repository"
+    assert cfg["mc1_cvmfs_enabled"] is False, "the site already installs CVMFS; never overwrite its config"

@@ -144,10 +144,12 @@ mc1_nfs_layout:
   /nfsdata: {owner: root, group: mu2e, mode: "2775", per_account: false}
 
 # ------------------------------------------------------------------ cvmfs ---
-# CernVM-FS client on every MC1 worker, repositories mounted statically at
-# /cvmfs/<repo> from /etc/fstab (no autofs). RPMs come from the local bundle
-# fetched by scripts/mc1-cvmfs-fetch-rpms, like Slurm.
-mc1_cvmfs_enabled: true
+# CVMFS is ALREADY INSTALLED on the MC1 workers by the site (found
+# 2026-10-08), so the cvmfs role stays off: enabling it would replace the
+# site's /etc/cvmfs/default.local and mount the repositories from fstab.
+# The role is kept for a node that lacks CVMFS. validate always checks that
+# every repository in mc1_cvmfs_repositories is readable from a job.
+mc1_cvmfs_enabled: false
 mc1_cvmfs_ignore_puppet: false        # refuse if the Puppet catalog manages cvmfs
 mc1_cvmfs_version: "2.14.1"
 mc1_cvmfs_rpm_dir: "{{ playbook_dir }}/../artifacts/rpms/cvmfs/{{ mc1_cvmfs_version }}"
