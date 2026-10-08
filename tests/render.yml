@@ -37,6 +37,8 @@
     v_multi: {rc: 1, stdout_lines: ["mu2e-mc1-worker-02"]}
     v_sacct: {stdout_lines: ["17|COMPLETED"]}
     # Fake slurped .k5login sources for roles/accounts/templates/k5login.j2.
+    nfs_served: [{server: mu2e-mc1-worker-17.fnal.gov, path: /nfshome, mount: /nfshome}]
+    nfs_clients: [131.225.246.21, 131.225.246.22]
     acct: {name: mu2ebatch, k5login: ["extra@FNAL.GOV"], k5login_from: [mu2eshift, mu2edaq]}
     k5_src:
       results:
@@ -64,6 +66,7 @@
         - {src: slurmd/templates/sysconfig-slurmd.j2, dest: sysconfig-slurmd}
         - {src: slurm_common/templates/logrotate-slurm.j2, dest: logrotate-slurm}
         - {src: accounts/templates/k5login.j2, dest: k5login}
+        - {src: nfs/templates/mc1.exports.j2, dest: mc1.exports}
 
     - name: Render the validation results template
       ansible.builtin.copy:

@@ -102,3 +102,12 @@ def test_nfs_host_volumes():
         hv = yaml.safe_load((ROOT / "config" / "host_vars" / ("mu2e-mc1-worker-%s.fnal.gov.yml" % host)).read_text())
         vols = hv["mc1_host_volumes"]
         assert [(v["lv"], v["mount"], v["size"]) for v in vols] == [(lv, mount, "100%FREE")]
+
+
+def test_nfs_config(cfg):
+    assert cfg["mc1_nfs_enabled"] is False, "NFS stays off until SCD lifts the Puppet pin"
+    ex = {e["mount"]: e["server"] for e in cfg["mc1_nfs_exports"]}
+    assert ex == {"/nfshome": "mu2e-mc1-worker-17.fnal.gov", "/nfsdata": "mu2e-mc1-worker-18.fnal.gov"}
+    assert "root_squash" in cfg["mc1_nfs_export_options"].split(",")
+    assert "x-systemd.automount" in cfg["mc1_nfs_mount_options"]
+    assert set(cfg["mc1_nfs_layout"]) == set(ex)

@@ -1,0 +1,9 @@
+---
+# NFS exports (/nfshome on worker-17, /nfsdata on worker-18) and client
+# mounts on every worker. Inert unless mc1_nfs_enabled; refuses while SLAM
+# Puppet pins nfs-server to stopped.
+- name: NFS exports and mounts
+  hosts: mc1_workers
+  gather_facts: true
+  roles:
+    - nfs

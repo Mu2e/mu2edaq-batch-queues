@@ -98,7 +98,7 @@ def test_validate_results(rendered):
     assert c["sacct_records"] == ["17|COMPLETED"]
 
 
-@pytest.mark.parametrize("playbook", ["preflight.yml", "site.yml", "storage.yml", "firewall.yml", "accounts.yml", "validate.yml"])
+@pytest.mark.parametrize("playbook", ["preflight.yml", "site.yml", "storage.yml", "firewall.yml", "accounts.yml", "nfs.yml", "validate.yml"])
 def test_playbook_syntax(playbook, ansible_env):
     exe = ansible_bin("ansible-playbook")
     if exe is None:
@@ -124,3 +124,9 @@ def test_preflight_verdict_lists_all_failures(tmp_path, ansible_env):
 def test_k5login_union(rendered):
     # Sources trimmed, comments/blanks dropped, other accounts' sources ignored.
     assert (rendered / "k5login").read_text() == "a@FNAL.GOV\nb@FNAL.GOV\nc@FNAL.GOV\nextra@FNAL.GOV\n"
+
+
+def test_nfs_exports(rendered):
+    lines = conf_lines(rendered / "mc1.exports")
+    opts = "rw,sync,root_squash,no_subtree_check,sec=sys"
+    assert lines == ["/nfshome 131.225.246.21/32(%s) 131.225.246.22/32(%s)" % (opts, opts)]

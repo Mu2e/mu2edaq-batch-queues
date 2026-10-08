@@ -1,0 +1,157 @@
+---
+# NFSv4.2 exports of node-local volumes to the MC1 workers, and client mounts
+# (systemd automount) at the same path on every other worker.
+#
+# Guards: does nothing unless mc1_nfs_enabled; refuses while SLAM Puppet's
+# catalog pins nfs-server.service to "stopped" (Puppet would stop the server
+# within 30 min and every client mount would hang), unless
+# mc1_nfs_ignore_puppet is set.
+
+- name: NFS is enabled in config
+  ansible.builtin.meta: end_host
+  when: not (mc1_nfs_enabled | bool)
+
+- name: This host's exports
+  ansible.builtin.set_fact:
+    nfs_served: "{{ mc1_nfs_exports | selectattr('server', 'equalto', inventory_hostname) | list }}"
+    nfs_mounted: "{{ mc1_nfs_exports | rejectattr('server', 'equalto', inventory_hostname) | list }}"
+
+- name: Desired state of nfs-server.service in the Puppet catalog
+  ansible.builtin.shell: |
+    set -o pipefail
+    c=$(ls /opt/puppetlabs/puppet/cache/client_data/catalog/*.json 2>/dev/null | head -1)
+    [ -n "$c" ] || { echo none; exit 0; }
+    /usr/bin/python3 -c 'import json,sys
+    c=json.load(open(sys.argv[1]))
+    print(next((r.get("parameters",{}).get("ensure","unset") for r in c.get("resources",[])
+                if r["type"]=="Service" and r["title"]=="nfs-server.service"),"unmanaged"))' "$c"
+  args:
+    executable: /bin/bash
+  register: nfs_puppet
+  changed_when: false
+  check_mode: false
+  when: nfs_served | length > 0
+
+- name: Puppet does not force the NFS server off
+  ansible.builtin.assert:
+    that: (mc1_nfs_ignore_puppet | bool) or (nfs_puppet.stdout | trim) not in ['stopped', 'false']
+    fail_msg: >-
+      SLAM Puppet pins nfs-server.service to '{{ nfs_puppet.stdout | trim }}' on
+      {{ inventory_hostname }}; it would stop the export within 30 minutes.
+      Get SCD to change the node's hiera first (docs/private/SCD-NFS-REQUEST.md).
+    quiet: true
+  when: nfs_served | length > 0
+
+# ---- servers ----------------------------------------------------------------
+
+- name: Resolve client addresses (every MC1 worker)
+  ansible.builtin.command: getent ahostsv4 {{ item }}
+  loop: "{{ groups['mc1_workers'] }}"
+  register: nfs_resolved
+  changed_when: false
+  check_mode: false
+  when: nfs_served | length > 0
+
+- name: Client address list
+  ansible.builtin.set_fact:
+    nfs_clients: "{{ nfs_resolved.results | map(attribute='stdout_lines') | map('first') | map('split') | map('first') | unique | sort | list }}"
+  when: nfs_served | length > 0
+
+- name: Export directory layout
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ mc1_nfs_layout[item.path].owner }}"
+    group: "{{ mc1_nfs_layout[item.path].group }}"
+    mode: "{{ mc1_nfs_layout[item.path].mode }}"
+  loop: "{{ nfs_served }}"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Per-account directories on exports that have them
+  ansible.builtin.file:
+    path: "{{ item.0.path }}/{{ item.1.name }}"
+    state: directory
+    owner: "{{ item.1.name }}"
+    group: "{{ item.1.group | default('mu2e') }}"
+    mode: "0750"
+  loop: "{{ nfs_served | selectattr('path', 'in', mc1_nfs_layout | dict2items | selectattr('value.per_account') | map(attribute='key') | list) | product(mc1_job_accounts) | list }}"
+  loop_control:
+    label: "{{ item.0.path }}/{{ item.1.name }}"
+
+- name: /etc/exports.d/mc1.exports
+  ansible.builtin.template:
+    src: mc1.exports.j2
+    dest: /etc/exports.d/mc1.exports
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Re-export
+  when: nfs_served | length > 0
+
+- name: NFS (2049/tcp) open to cluster members in the cluster zone
+  ansible.posix.firewalld:
+    zone: "{{ mc1_fw_zone }}"
+    service: nfs
+    permanent: true
+    immediate: true
+    state: enabled
+  when: nfs_served | length > 0
+
+- name: NFS server running
+  ansible.builtin.systemd:
+    name: nfs-server
+    enabled: true
+    state: started
+  when: nfs_served | length > 0
+
+- name: Apply export changes before clients mount
+  ansible.builtin.meta: flush_handlers
+
+# ---- clients ----------------------------------------------------------------
+
+- name: Client mount points are not local mounts already
+  ansible.builtin.assert:
+    that: >-
+      ansible_facts.mounts | selectattr('mount', 'equalto', item.mount)
+      | rejectattr('fstype', 'match', '^(nfs|nfs4|autofs)$') | list | length == 0
+    fail_msg: "{{ item.mount }} is a local mount on {{ inventory_hostname }}; not mounting NFS over it"
+    quiet: true
+  loop: "{{ nfs_mounted }}"
+  loop_control:
+    label: "{{ item.mount }}"
+
+- name: fstab entries (systemd automount, mounted on first access)
+  ansible.posix.mount:
+    path: "{{ item.mount }}"
+    src: "{{ item.server }}:{{ item.path }}"
+    fstype: nfs4
+    opts: "{{ mc1_nfs_mount_options }}"
+    state: present
+  loop: "{{ nfs_mounted }}"
+  loop_control:
+    label: "{{ item.server.split('.')[0] }}:{{ item.path }} -> {{ item.mount }}"
+  register: nfs_fstab
+
+- name: Mount point directories
+  ansible.builtin.file:
+    path: "{{ item.mount }}"
+    state: directory
+    mode: "0755"
+  loop: "{{ nfs_mounted }}"
+  loop_control:
+    label: "{{ item.mount }}"
+
+- name: Reload systemd so it generates the automount units
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: nfs_fstab is changed
+
+- name: Automount units active
+  ansible.builtin.systemd:
+    name: "{{ item.mount | regex_replace('^/', '') | regex_replace('/', '-') }}.automount"
+    state: started
+  loop: "{{ nfs_mounted }}"
+  loop_control:
+    label: "{{ item.mount }}"
+  ignore_errors: "{{ ansible_check_mode }}"

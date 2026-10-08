@@ -1,0 +1,4 @@
+---
+- name: Re-export
+  ansible.builtin.command: exportfs -ra
+  when: not ansible_check_mode

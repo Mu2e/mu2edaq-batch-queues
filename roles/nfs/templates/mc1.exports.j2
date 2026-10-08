@@ -1,0 +1,6 @@
+# {{ ansible_managed }}
+# NFSv4.2 exports to the MC1 workers only (one /32 per worker).
+{% for e in nfs_served %}
+{{ e.path }} {% for a in nfs_clients %}{{ a }}/32({{ mc1_nfs_export_options }}){{ ' ' if not loop.last }}{% endfor %}
+
+{% endfor %}

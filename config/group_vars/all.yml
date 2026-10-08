@@ -125,6 +125,24 @@ mc1_local_volumes:
   - {lv: scratch,    mount: /scratch,    size: 100G, label: scratch,    owner: root, group: mu2e, mode: "1777"}
   - {lv: data_local, mount: /data-local, size: 500G, label: data-local, owner: root, group: mu2e, mode: "1777"}
 
+# -------------------------------------------------------------------- nfs ---
+# /nfshome (worker-17) and /nfsdata (worker-18) exported to every MC1 worker
+# and mounted at the same path everywhere. Gated twice: mc1_nfs_enabled must
+# be true AND SLAM Puppet must no longer pin nfs-server to "stopped" (it does
+# on 2026-10-08, class nfs::service), unless mc1_nfs_ignore_puppet is set.
+mc1_nfs_enabled: false
+mc1_nfs_ignore_puppet: false
+mc1_nfs_exports:
+  - {server: mu2e-mc1-worker-17.fnal.gov, path: /nfshome, mount: /nfshome}
+  - {server: mu2e-mc1-worker-18.fnal.gov, path: /nfsdata, mount: /nfsdata}
+mc1_nfs_export_options: rw,sync,root_squash,no_subtree_check,sec=sys
+mc1_nfs_mount_options: rw,hard,nfsvers=4.2,proto=tcp,_netdev,nofail,x-systemd.automount,x-systemd.mount-timeout=30
+# Top-level layout on the servers. /nfshome gets one 0750 directory per job
+# account; /nfsdata is group-writable for mu2e with setgid.
+mc1_nfs_layout:
+  /nfshome: {owner: root, group: root, mode: "0755", per_account: true}
+  /nfsdata: {owner: root, group: mu2e, mode: "2775", per_account: false}
+
 # --------------------------------------------------------------- firewall ---
 # Applied only where firewalld is active: an own zone whose sources are the
 # slurm_cluster members' addresses (see roles/firewall). Nothing outside the
