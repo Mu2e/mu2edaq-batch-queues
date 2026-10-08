@@ -47,6 +47,11 @@ flowchart LR
 | D11 | Workers 04–16 declared `State=FUTURE` | Bringing a node online is an inventory move plus a re-run. |
 | D16 | Slurm traffic goes to the project's own firewalld zone `10_mc1_cluster`, whose sources are the cluster members' /32 addresses; it allows ssh, 6817, 6818 and 60001–63000 | SLAM Puppet owns the zones that would otherwise match (`50_FNAL`, target REJECT). Zones that match by source are dispatched in name order, so `10_` wins. A Puppet `--noop` run on 2026-10-07 showed no changes. |
 | D17 | A running Puppet agent is a preflight warning, not a failure | SLAM Puppet manages only root, its own packages and services, and firewalld; it does not touch slurm, munge, MariaDB or local users. |
+| D18 | CVMFS client 2.14.1 from a local, sha256-verified RPM bundle (`scripts/mc1-cvmfs-fetch-rpms`), version-locked | Same as Slurm: the install does not depend on the enclave reaching cvmrepo, and EL9 and EL10 get the same release. |
+| D19 | Repositories mounted statically from `/etc/fstab` at `/cvmfs/<repo>` (`cvmfs_config setup noautofs`), options `_netdev,nodev,nofail` | Batch jobs see a mount that is always there; no autofs map competes with SLAM Puppet, and the mount points are created by the role. `nofail` keeps a dead squid from blocking boot. |
+| D20 | Repositories `mu2e` and `fermilab.opensciencegrid.org`; no config repository (`CVMFS_CONFIG_REPOSITORY=`) | Mu2e setup scripts take products from `fermilab`. Without autofs, a config repository would have to be mounted before the others; the stratum 1 list and keys in `cvmfs-config-default` suffice. |
+| D21 | Proxy: `CVMFS_CLIENT_PROFILE=single` (WLCG WPAD) unless `mc1_cvmfs_http_proxy` is set | WPAD returns the Fermilab squids for on-site addresses, so no squid name is hard-coded. The role checks WPAD and stratum 1 reachability before installing and stops if neither answers. |
+| D22 | Cache at `/var/lib/cvmfs`, quota 20000 MB, checked against free space (+15%) before install | Workers 17–18 have no free space left in `os_vg` for a dedicated LV. The quota and location are per-host overridable. |
 
 ## Mechanisms
 

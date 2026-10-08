@@ -1,0 +1,5 @@
+---
+- name: Reload cvmfs
+  ansible.builtin.command: cvmfs_config reload
+  changed_when: true
+  when: ansible_facts.mounts | selectattr('fstype', 'equalto', 'fuse') | selectattr('device', 'match', '^cvmfs2') | list | length > 0

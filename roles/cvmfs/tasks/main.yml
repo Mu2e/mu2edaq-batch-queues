@@ -1,0 +1,223 @@
+---
+# CernVM-FS client: packages from the local bundle, /etc/cvmfs/default.local,
+# and one static fstab mount per repository at /cvmfs/<repo>.
+#
+# Guards (all read-only, run in --check too): refuses if the Puppet catalog
+# manages cvmfs (unless mc1_cvmfs_ignore_puppet), if autofs already owns
+# /cvmfs, or if the cache filesystem cannot hold the quota. Reports whether a
+# stratum 1 / WPAD is reachable before anything is installed.
+
+- name: CVMFS is enabled in config
+  ansible.builtin.meta: end_host
+  when: not (mc1_cvmfs_enabled | bool)
+
+- name: Derived settings
+  ansible.builtin.set_fact:
+    cv_el: "el{{ ansible_facts.distribution_major_version }}"
+    cv_cache: /var/cache/mc1-cvmfs/{{ mc1_cvmfs_version }}
+    # The config repository (if any) must be mounted before the others.
+    cv_mounts: "{{ ([mc1_cvmfs_config_repository] if mc1_cvmfs_config_repository else []) + mc1_cvmfs_repositories }}"
+
+# ---- guards -----------------------------------------------------------------
+
+- name: Puppet catalog resources that touch CVMFS
+  ansible.builtin.shell: |
+    set -o pipefail
+    c=$(ls /opt/puppetlabs/puppet/cache/client_data/catalog/*.json 2>/dev/null | head -1)
+    [ -n "$c" ] || exit 0
+    /usr/bin/python3 -c 'import json,sys
+    c=json.load(open(sys.argv[1]))
+    for r in c.get("resources",[]):
+        if "cvmfs" in (r["type"]+" "+str(r["title"])).lower():
+            print(r["type"], r["title"], r.get("parameters",{}).get("ensure",""))' "$c"
+  args:
+    executable: /bin/bash
+  register: cv_puppet
+  changed_when: false
+  check_mode: false
+
+- name: Puppet does not manage CVMFS here
+  ansible.builtin.assert:
+    that: (mc1_cvmfs_ignore_puppet | bool) or cv_puppet.stdout_lines | length == 0
+    fail_msg: >-
+      The Puppet catalog on {{ inventory_hostname }} manages CVMFS
+      ({{ cv_puppet.stdout_lines | join('; ') }}); it would fight this role.
+      Coordinate with SCD, or set mc1_cvmfs_ignore_puppet=true.
+    quiet: true
+
+- name: autofs does not own /cvmfs (repositories are mounted from fstab)
+  ansible.builtin.assert:
+    that: >-
+      ansible_facts.mounts | selectattr('mount', 'equalto', '/cvmfs')
+      | selectattr('fstype', 'equalto', 'autofs') | list | length == 0
+    fail_msg: "/cvmfs is an autofs mount on {{ inventory_hostname }}; remove that map first"
+    quiet: true
+
+- name: Space on the cache filesystem (free + what the cache already uses), KiB
+  ansible.builtin.shell: |
+    set -o pipefail
+    d={{ mc1_cvmfs_cache_base | quote }}
+    used=0; [ -d "$d" ] && used=$(du -skx "$d" | cut -f1)
+    while [ ! -d "$d" ]; do d=$(dirname "$d"); done
+    free=$(df -Pk "$d" | awk 'NR==2{print $4}')
+    echo $((free + used))
+  args:
+    executable: /bin/bash
+  register: cv_space
+  changed_when: false
+  check_mode: false
+
+- name: Cache filesystem can hold the quota plus 15%
+  ansible.builtin.assert:
+    that: (cv_space.stdout | int) >= (mc1_cvmfs_quota_mb | int) * 1024 * 115 // 100
+    fail_msg: >-
+      {{ mc1_cvmfs_cache_base }} on {{ inventory_hostname }} has
+      {{ (cv_space.stdout | int) // 1024 }} MB available; mc1_cvmfs_quota_mb={{ mc1_cvmfs_quota_mb }}
+      needs {{ (mc1_cvmfs_quota_mb | int) * 115 // 100 }} MB. Lower the quota or move
+      mc1_cvmfs_cache_base (host_vars).
+    quiet: true
+
+- name: Reachability of the WPAD and a stratum 1 (HTTP status, 000 = unreachable)
+  ansible.builtin.shell: |
+    {% set px = mc1_cvmfs_http_proxy.split(';')[0].split('|')[0] %}
+    {% if px and px not in ['DIRECT', 'auto'] %}
+    echo "proxy {{ px }}: $(curl -s -o /dev/null -m 8 -w '%{http_code}' -x {{ px | quote }} {{ (mc1_cvmfs_check_url ~ '/' ~ mc1_cvmfs_repositories[0] ~ '/.cvmfspublished') | quote }})"
+    {% else %}
+    echo "wpad: $(curl -s -o /dev/null -m 8 -w '%{http_code}' http://cernvm-wpad.fnal.gov/wpad.dat)"
+    {% endif %}
+    echo "direct: $(curl -s -o /dev/null -m 8 -w '%{http_code}' {{ (mc1_cvmfs_check_url ~ '/' ~ mc1_cvmfs_repositories[0] ~ '/.cvmfspublished') | quote }})"
+  args:
+    executable: /bin/bash
+  register: cv_net
+  changed_when: false
+  check_mode: false
+
+- name: Report reachability
+  ansible.builtin.debug:
+    msg: "{{ cv_net.stdout_lines }}"
+
+- name: At least one path to the repositories answers
+  ansible.builtin.assert:
+    that: cv_net.stdout is search(':\s*200')
+    fail_msg: >-
+      {{ inventory_hostname }} reaches neither a proxy/WPAD nor the stratum 1
+      ({{ cv_net.stdout_lines | join(', ') }}). Set mc1_cvmfs_http_proxy to a
+      squid the enclave can reach.
+    quiet: true
+
+# ---- packages -----------------------------------------------------------------
+
+- name: CVMFS RPMs in the local bundle
+  ansible.builtin.find:
+    paths: "{{ mc1_cvmfs_rpm_dir }}/{{ cv_el }}"
+    patterns: "{{ mc1_cvmfs_packages | map('regex_replace', '$', '-[0-9]*.rpm') | list }}"
+  delegate_to: localhost
+  become: false
+  register: cv_rpms
+
+- name: Every package is in the bundle (scripts/mc1-cvmfs-fetch-rpms)
+  ansible.builtin.assert:
+    that: cv_rpms.files | length == mc1_cvmfs_packages | length
+    fail_msg: "{{ cv_el }} bundle has {{ cv_rpms.files | map(attribute='path') | map('basename') | list }}, need {{ mc1_cvmfs_packages }}"
+    quiet: true
+
+- name: Staging directory for the RPMs
+  ansible.builtin.file:
+    path: "{{ cv_cache }}"
+    state: directory
+    mode: "0755"
+
+- name: Copy the RPMs to the node
+  ansible.builtin.copy:
+    src: "{{ item.path }}"
+    dest: "{{ cv_cache }}/"
+    mode: "0644"
+  loop: "{{ cv_rpms.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+
+- name: Install CVMFS (dependencies such as fuse3, autofs, gdb from the OS repos)
+  ansible.builtin.dnf:
+    name: "{{ cv_rpms.files | map(attribute='path') | map('basename') | map('regex_replace', '^', cv_cache ~ '/') | list }}"
+    state: present
+    disable_gpg_check: true      # sha256-verified against cvmrepo metadata at fetch time
+    disablerepo: "{{ mc1_dnf_disablerepo }}"
+  ignore_errors: "{{ ansible_check_mode }}"   # RPMs are not copied in --check
+
+- name: Lock the CVMFS client at this release
+  ansible.builtin.shell: |
+    set -e
+    dnf versionlock delete 'cvmfs*' >/dev/null 2>&1 || true
+    dnf versionlock add {{ mc1_cvmfs_packages | join(' ') }}
+  args:
+    executable: /bin/bash
+  changed_when: false
+  when: not ansible_check_mode
+
+# ---- configuration --------------------------------------------------------------
+
+- name: /etc/cvmfs/default.local
+  ansible.builtin.template:
+    src: default.local.j2
+    dest: /etc/cvmfs/default.local
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload cvmfs
+  ignore_errors: "{{ ansible_check_mode }}"   # /etc/cvmfs exists only after the RPM
+
+- name: FUSE and kernel setup, without autofs (cvmfs_config setup noautofs)
+  ansible.builtin.shell: |
+    set -e
+    grep -q '^user_allow_other' /etc/fuse.conf 2>/dev/null && { echo unchanged; exit 0; }
+    cvmfs_config setup noautofs
+  args:
+    executable: /bin/bash
+  register: cv_setup
+  changed_when: cv_setup.stdout != 'unchanged'
+  when: not ansible_check_mode
+
+- name: Configuration is valid (cvmfs_config chksetup)
+  ansible.builtin.command: cvmfs_config chksetup
+  register: cv_chk
+  changed_when: false
+  failed_when: cv_chk.rc != 0 or 'Error' in cv_chk.stdout
+  when: not ansible_check_mode
+
+- name: Cache directory
+  ansible.builtin.file:
+    path: "{{ mc1_cvmfs_cache_base }}"
+    state: directory
+    owner: cvmfs
+    group: cvmfs
+    mode: "0700"
+  ignore_errors: "{{ ansible_check_mode }}"   # the cvmfs user comes with the RPM
+
+- name: /cvmfs
+  ansible.builtin.file:
+    path: /cvmfs
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Apply a config change to repositories that are already mounted
+  ansible.builtin.meta: flush_handlers
+
+# ---- mounts -----------------------------------------------------------------------
+
+- name: Repositories mounted at /cvmfs/<repo> (fstab; creates the mount points)
+  ansible.posix.mount:
+    path: /cvmfs/{{ item }}
+    src: "{{ item }}"
+    fstype: cvmfs
+    opts: "{{ mc1_cvmfs_mount_options }}"
+    state: mounted
+  loop: "{{ cv_mounts }}"
+
+- name: Each repository answers (cvmfs_config probe)
+  ansible.builtin.command: cvmfs_config probe {{ cv_mounts | join(' ') }}
+  register: cv_probe
+  changed_when: false
+  failed_when: cv_probe.rc != 0 or 'Failed' in cv_probe.stdout
+  when: not ansible_check_mode

@@ -1,0 +1,17 @@
+# {{ ansible_managed }}
+# CernVM-FS client settings for the MC1 workers (roles/cvmfs, config/group_vars/all.yml).
+CVMFS_REPOSITORIES={{ mc1_cvmfs_repositories | join(',') }}
+{% if mc1_cvmfs_http_proxy %}
+CVMFS_HTTP_PROXY="{{ mc1_cvmfs_http_proxy }}"
+{% else %}
+# Proxy discovery through the WLCG WPAD (Fermilab squids for on-site hosts).
+CVMFS_CLIENT_PROFILE=single
+{% endif %}
+CVMFS_CACHE_BASE={{ mc1_cvmfs_cache_base }}
+CVMFS_QUOTA_LIMIT={{ mc1_cvmfs_quota_mb }}
+{% if mc1_cvmfs_config_repository %}
+CVMFS_CONFIG_REPOSITORY={{ mc1_cvmfs_config_repository }}
+{% else %}
+# No config repository: stratum 1 list and keys come from cvmfs-config-default.
+CVMFS_CONFIG_REPOSITORY=
+{% endif %}

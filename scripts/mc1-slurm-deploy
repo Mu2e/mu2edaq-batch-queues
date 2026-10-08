@@ -6,6 +6,7 @@ Actions:
   deploy      full installation; --check --diff unless --apply is given
   storage     /scratch and /data-local only; --check --diff unless --apply
   nfs         /nfshome + /nfsdata exports and mounts; --check --diff unless --apply
+  cvmfs       CVMFS client and /cvmfs/<repo> mounts; --check --diff unless --apply
   accounts    service/job accounts and .k5login only; --check --diff unless --apply
   firewall    cluster firewalld zone only; --check --diff unless --apply
   validate    post-install test jobs; writes results/validate-<UTC>.json
@@ -36,6 +37,7 @@ PLAYBOOKS = {
     "firewall": "playbooks/firewall.yml",
     "accounts": "playbooks/accounts.yml",
     "nfs": "playbooks/nfs.yml",
+    "cvmfs": "playbooks/cvmfs.yml",
     "validate": "playbooks/validate.yml",
 }
 # Environment variables with a dedicated Ansible variable.
@@ -124,7 +126,7 @@ def find_ansible_playbook() -> Optional[str]:
 def build_command(action: str, args: argparse.Namespace, extra_file: Optional[str],
                   exe: str) -> List[str]:
     cmd = [exe, str(ROOT / PLAYBOOKS[action])]
-    if action in ("deploy", "storage", "firewall", "accounts", "nfs"):
+    if action in ("deploy", "storage", "firewall", "accounts", "nfs", "cvmfs"):
         cmd += ["--diff"] if args.apply else ["--check", "--diff"]
     if args.limit:
         cmd += ["--limit", args.limit]

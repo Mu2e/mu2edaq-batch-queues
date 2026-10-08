@@ -111,3 +111,11 @@ def test_nfs_config(cfg):
     assert "root_squash" in cfg["mc1_nfs_export_options"].split(",")
     assert "x-systemd.automount" in cfg["mc1_nfs_mount_options"]
     assert set(cfg["mc1_nfs_layout"]) == set(ex)
+
+
+def test_cvmfs_config(cfg):
+    assert "mu2e.opensciencegrid.org" in cfg["mc1_cvmfs_repositories"]
+    assert set(cfg["mc1_cvmfs_packages"]) >= {"cvmfs", "cvmfs-libs", "cvmfs-config-default"}
+    opts = cfg["mc1_cvmfs_mount_options"].split(",")
+    assert "_netdev" in opts and "nofail" in opts, "a dead squid must not hang boot"
+    assert cfg["mc1_cvmfs_config_repository"] == "", "static mounts: no config repository"

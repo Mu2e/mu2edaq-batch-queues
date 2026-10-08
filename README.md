@@ -26,6 +26,9 @@ scripts/mc1-slurm-deploy deploy --apply      # install
 scripts/mc1-slurm-deploy validate            # test jobs -> results/validate-<UTC>.json
 ```
 
+CVMFS (`/cvmfs/mu2e.opensciencegrid.org`, `/cvmfs/fermilab.opensciencegrid.org`):
+`scripts/mc1-cvmfs-fetch-rpms`, then `scripts/mc1-slurm-deploy cvmfs [--apply]`.
+
 mu2ebatch is uid 51329, group mu2e (9914); its .k5login is the union of
 mu2eshift's and mu2edaq's on each node. See [docs/INSTALL.md](docs/INSTALL.md).
 
@@ -34,10 +37,11 @@ mu2eshift's and mu2edaq's on each node. See [docs/INSTALL.md](docs/INSTALL.md).
 ```
 config/   inventory.yml              controller and compute groups
           group_vars/all.yml         every setting (accounts, ports, partitions, slurmdbd)
-playbooks/ preflight.yml storage.yml site.yml validate.yml
-roles/    preflight storage accounts munge slurm_common firewall slurmdbd slurmctld slurmd
+playbooks/ preflight.yml storage.yml site.yml nfs.yml cvmfs.yml validate.yml
+roles/    preflight storage accounts munge slurm_common firewall slurmdbd slurmctld slurmd nfs cvmfs
 scripts/  mc1-slurm-deploy           wrapper: CLI > env > .env > config overrides
           mc1-slurm-presurvey        read-only host survey over ssh
+          mc1-cvmfs-fetch-rpms       CVMFS client RPMs, sha256-verified, for the cvmfs role
 man/      man1/                      man pages for every script
 docs/     GETTING-STARTED.md/.pdf     user guide (also web/index.html)
           DESIGN.md INSTALL.md USAGE.md   design; install/operations; job reference

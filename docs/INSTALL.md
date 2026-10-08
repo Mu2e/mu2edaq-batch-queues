@@ -81,3 +81,28 @@ scripts/mc1-slurm-deploy storage --apply
 
 Grow later with `lvextend -r -L +50G os_vg/data_local`, then update the size in
 the config.
+
+## CVMFS (/cvmfs/mu2e.opensciencegrid.org)
+
+The `cvmfs` role installs the CernVM-FS client on every worker (01–18) and
+mounts each repository in `mc1_cvmfs_repositories` at `/cvmfs/<repo>` from
+`/etc/fstab`. It is also part of `deploy`.
+
+```sh
+scripts/mc1-cvmfs-fetch-rpms                  # once per release: RPMs -> artifacts/rpms/cvmfs/<ver>/
+scripts/mc1-slurm-deploy cvmfs                # dry run; runs the guards and reachability check
+scripts/mc1-slurm-deploy cvmfs --apply
+scripts/mc1-slurm-deploy validate             # cvmfs_in_job: every repo listed from a job on each node
+```
+
+The dry run already stops if Puppet manages CVMFS, autofs owns `/cvmfs`, the
+cache filesystem is too small, or neither WPAD nor a stratum 1 answers. If
+the enclave needs an explicit squid:
+
+```sh
+scripts/mc1-slurm-deploy cvmfs --set 'mc1_cvmfs_http_proxy=http://<squid>:3128' --apply
+```
+
+On a node: `cvmfs_config probe`, `cvmfs_config stat -v mu2e.opensciencegrid.org`,
+`cvmfs_config showconfig mu2e.opensciencegrid.org`. To add a repository,
+append it to `mc1_cvmfs_repositories` and re-run.

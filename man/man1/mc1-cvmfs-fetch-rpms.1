@@ -1,0 +1,79 @@
+.TH MC1-CVMFS-FETCH-RPMS 1 "2026-10-08" "mu2edaq-batch-queues" "Mu2e DAQ Tools"
+.SH NAME
+mc1-cvmfs-fetch-rpms \- download and verify the CernVM-FS client RPMs for the MC1 deployer
+.SH SYNOPSIS
+.B mc1-cvmfs-fetch-rpms
+.RB [ \-V
+.IR version ]
+.RB [ \-\-el
+.IR list ]
+.RB [ \-\-url
+.IR base ]
+.RB [ \-o
+.IR dir ]
+.RB [ \-n ]
+.SH DESCRIPTION
+Runs on the operator machine. For each EL major release it reads the
+repository metadata of the CERN CVMFS yum repository, selects
+.BR cvmfs ,
+.B cvmfs-libs
+and
+.B cvmfs-fuse3
+at
+.I version
+and the newest
+.BR cvmfs-config-default ,
+downloads them, and checks each file's SHA-256 against the metadata. Files
+land in
+.IR artifacts/rpms/cvmfs/<version>/el<N>/ ,
+which the
+.B cvmfs
+role copies to the nodes. A file that is already present with the right
+checksum is not downloaded again; older builds of the same package are
+removed so the role finds exactly one.
+.PP
+The MC1 nodes therefore never contact cvmrepo themselves. Package
+dependencies (fuse3, autofs, gdb, ...) still come from the nodes' OS
+repositories.
+.SH OPTIONS
+.TP
+.BI \-V ", " \-\-version " version"
+cvmfs release (env
+.BR MC1_CVMFS_VERSION ,
+default 2.14.1). Must match
+.B mc1_cvmfs_version
+in
+.IR config/group_vars/all.yml .
+.TP
+.BI \-\-el " list"
+Comma-separated EL majors (env
+.BR MC1_CVMFS_EL ,
+default 9,10).
+.TP
+.BI \-\-url " base"
+Repository base above
+.I <el>/x86_64
+(env
+.BR MC1_CVMFS_REPO_URL ,
+default https://cvmrepo.s3.cern.ch/cvmrepo/yum/cvmfs/EL).
+.TP
+.BI \-o ", " \-\-out " dir"
+Output root (default
+.IR artifacts/rpms/cvmfs/<version> ).
+.TP
+.BR \-n ", " \-\-dry\-run
+List what would be fetched.
+.SH ENVIRONMENT
+Command-line options override the environment, which overrides the defaults.
+.SH EXIT STATUS
+0 on success; non-zero if a package is missing from the repository or a
+checksum does not match (the bad file is not written).
+.SH EXAMPLES
+.nf
+scripts/mc1-cvmfs-fetch-rpms
+scripts/mc1-cvmfs-fetch-rpms \-n \-V 2.14.1 \-\-el 9
+scripts/mc1-slurm-deploy cvmfs            # dry run with the bundle
+.fi
+.SH SEE ALSO
+.BR mc1-slurm-deploy (1),
+.BR mc1-slurm-build-rpms (1)

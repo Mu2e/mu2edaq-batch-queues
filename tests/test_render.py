@@ -95,10 +95,11 @@ def test_validate_results(rendered):
     # rc 0 means the 64M job was NOT killed: the limit is not enforced.
     assert c["memory_limit_enforced"] == {"mu2e-mc1-worker-02": True, "mu2e-mc1-worker-03": False}
     assert c["multi_node_srun"] is False
+    assert c["cvmfs_in_job"] == {"mu2e-mc1-worker-02": True, "mu2e-mc1-worker-03": False}
     assert c["sacct_records"] == ["17|COMPLETED"]
 
 
-@pytest.mark.parametrize("playbook", ["preflight.yml", "site.yml", "storage.yml", "firewall.yml", "accounts.yml", "nfs.yml", "validate.yml"])
+@pytest.mark.parametrize("playbook", ["preflight.yml", "site.yml", "storage.yml", "firewall.yml", "accounts.yml", "nfs.yml", "cvmfs.yml", "validate.yml"])
 def test_playbook_syntax(playbook, ansible_env):
     exe = ansible_bin("ansible-playbook")
     if exe is None:
@@ -130,3 +131,25 @@ def test_nfs_exports(rendered):
     lines = conf_lines(rendered / "mc1.exports")
     opts = "rw,sync,root_squash,no_subtree_check,sec=sys"
     assert lines == ["/nfshome 131.225.246.21/32(%s) 131.225.246.22/32(%s)" % (opts, opts)]
+
+
+def cvmfs_settings(path):
+    return dict(l.split("=", 1) for l in conf_lines(path))
+
+
+def test_cvmfs_default_local(rendered):
+    kv = cvmfs_settings(rendered / "cvmfs-default.local")
+    assert kv == {
+        "CVMFS_REPOSITORIES": "mu2e.opensciencegrid.org,fermilab.opensciencegrid.org",
+        "CVMFS_CLIENT_PROFILE": "single",
+        "CVMFS_CACHE_BASE": "/var/lib/cvmfs",
+        "CVMFS_QUOTA_LIMIT": "20000",
+        "CVMFS_CONFIG_REPOSITORY": "",
+    }
+
+
+def test_cvmfs_default_local_explicit_proxy(rendered):
+    kv = cvmfs_settings(rendered / "cvmfs-default.local.proxy")
+    assert kv["CVMFS_HTTP_PROXY"] == '"http://squid-a:3128|http://squid-b:3128;DIRECT"'
+    assert "CVMFS_CLIENT_PROFILE" not in kv
+    assert kv["CVMFS_CONFIG_REPOSITORY"] == "config-osg.opensciencegrid.org"

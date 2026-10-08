@@ -5,6 +5,7 @@
 #   3. accounts, munge      fixed UID/GID before RPM scriptlets; one shared key
 #   4. controller           packages, firewall, slurmdbd, then slurmctld
 #   5. compute              packages, firewall, slurmd (needs slurmctld up)
+#   6. cvmfs                CVMFS client, /cvmfs/<repo> mounts on every worker
 - import_playbook: preflight.yml
 
 - import_playbook: storage.yml
@@ -32,3 +33,5 @@
     - slurm_common
     - firewall
     - slurmd
+
+- import_playbook: cvmfs.yml

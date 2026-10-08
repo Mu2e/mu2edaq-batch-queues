@@ -143,6 +143,33 @@ mc1_nfs_layout:
   /nfshome: {owner: root, group: root, mode: "0755", per_account: true}
   /nfsdata: {owner: root, group: mu2e, mode: "2775", per_account: false}
 
+# ------------------------------------------------------------------ cvmfs ---
+# CernVM-FS client on every MC1 worker, repositories mounted statically at
+# /cvmfs/<repo> from /etc/fstab (no autofs). RPMs come from the local bundle
+# fetched by scripts/mc1-cvmfs-fetch-rpms, like Slurm.
+mc1_cvmfs_enabled: true
+mc1_cvmfs_ignore_puppet: false        # refuse if the Puppet catalog manages cvmfs
+mc1_cvmfs_version: "2.14.1"
+mc1_cvmfs_rpm_dir: "{{ playbook_dir }}/../artifacts/rpms/cvmfs/{{ mc1_cvmfs_version }}"
+mc1_cvmfs_packages: [cvmfs, cvmfs-libs, cvmfs-fuse3, cvmfs-config-default]
+# Mu2e's setup scripts pull products from fermilab.opensciencegrid.org too.
+mc1_cvmfs_repositories:
+  - mu2e.opensciencegrid.org
+  - fermilab.opensciencegrid.org
+# Empty: CVMFS_CLIENT_PROFILE=single, i.e. proxy discovery via the WLCG WPAD
+# (cernvm-wpad.fnal.gov), which returns the Fermilab squids for on-site
+# addresses. Set an explicit list ("http://squid1:3128|http://squid2:3128;DIRECT")
+# to pin the proxies.
+mc1_cvmfs_http_proxy: ""
+# Empty: use only the configuration packaged in cvmfs-config-default and do
+# not mount cvmfs-config.cern.ch (static mounts would need it mounted first).
+mc1_cvmfs_config_repository: ""
+mc1_cvmfs_cache_base: /var/lib/cvmfs
+mc1_cvmfs_quota_mb: 20000             # CVMFS_QUOTA_LIMIT; needs ~15% headroom on the cache filesystem
+mc1_cvmfs_mount_options: defaults,_netdev,nodev,nofail
+# Stratum 1 used by the reachability check (and nothing else).
+mc1_cvmfs_check_url: http://cvmfs-s1fnal.opensciencegrid.org:8000/cvmfs
+
 # --------------------------------------------------------------- firewall ---
 # Applied only where firewalld is active: an own zone whose sources are the
 # slurm_cluster members' addresses (see roles/firewall). Nothing outside the

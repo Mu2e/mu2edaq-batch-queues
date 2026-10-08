@@ -1,9 +1,9 @@
-.TH MC1-SLURM-DEPLOY 1 "2026-10-06" "mu2edaq-batch-queues" "Mu2e DAQ Tools"
+.TH MC1-SLURM-DEPLOY 1 "2026-10-08" "mu2edaq-batch-queues" "Mu2e DAQ Tools"
 .SH NAME
 mc1-slurm-deploy \- install, check and validate Slurm on the Mu2e MC1 trigger cluster
 .SH SYNOPSIS
 .B mc1-slurm-deploy
-.RB { preflight | deploy | validate }
+.RB { preflight | deploy | storage | accounts | firewall | nfs | cvmfs | validate }
 .RB [ \-\-apply ]
 .RB [ \-\-limit
 .IR pattern ]
@@ -48,10 +48,65 @@ and changes nothing. On nodes where Slurm is not yet installed, the dry run
 cannot show steps that depend on files the packages would create; those tasks
 are reported as ignored errors.
 .TP
+.B storage
+Only the
+.I /scratch
+and
+.I /data-local
+logical volumes (and
+.IR /nfshome ,
+.I /nfsdata
+on workers 17 and 18).
+.TP
+.B accounts
+Only the service and job accounts, their
+.I .k5login
+files and the job accounts' login environment.
+.TP
+.B firewall
+Only the cluster firewalld zone.
+.TP
+.B nfs
+NFS exports from workers 17 and 18 and automounts on every worker. Inert
+unless
+.B mc1_nfs_enabled
+is true; refuses while the SLAM Puppet catalog pins nfs-server to stopped.
+.TP
+.B cvmfs
+Installs the CernVM-FS client from the bundle made by
+.BR mc1-cvmfs-fetch-rpms (1),
+writes
+.IR /etc/cvmfs/default.local ,
+and mounts each repository in
+.B mc1_cvmfs_repositories
+at
+.I /cvmfs/<repo>
+from
+.I /etc/fstab
+(no autofs). Before any change it refuses if the Puppet catalog manages
+CVMFS, if autofs owns
+.IR /cvmfs ,
+or if the cache filesystem cannot hold
+.BR mc1_cvmfs_quota_mb ;
+it also reports whether the WPAD (or the configured proxy) and a stratum 1
+answer, and stops if neither does. Also part of
+.BR deploy .
+.PP
+Every action except
+.B preflight
+and
+.B validate
+runs with
+.B \-\-check \-\-diff
+unless
+.B \-\-apply
+is given.
+.TP
 .B validate
 Runs test jobs as the first new job account: scontrol ping, node state,
 a MUNGE round trip, srun and sbatch on every compute node, cgroup memory
-enforcement, a multi-node step, and sacct records. It writes
+enforcement, a multi-node step, a listing of every CVMFS repository from a job
+on each compute node, and sacct records. It writes
 .IR results/validate-<UTC>.json .
 .SH OPTIONS
 .TP

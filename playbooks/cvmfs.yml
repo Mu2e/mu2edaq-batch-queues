@@ -1,0 +1,8 @@
+---
+# CernVM-FS client on every MC1 worker; repositories (mu2e, fermilab) mounted
+# at /cvmfs/<repo> from /etc/fstab. Bundle: scripts/mc1-cvmfs-fetch-rpms.
+- name: CVMFS client and /cvmfs mounts
+  hosts: mc1_workers
+  gather_facts: true
+  roles:
+    - cvmfs

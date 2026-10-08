@@ -36,6 +36,10 @@
         - {item: mu2e-mc1-worker-03, rc: 0, stderr: ""}
     v_multi: {rc: 1, stdout_lines: ["mu2e-mc1-worker-02"]}
     v_sacct: {stdout_lines: ["17|COMPLETED"]}
+    v_cvmfs:
+      results:
+        - {item: mu2e-mc1-worker-02, rc: 0, stdout: ""}
+        - {item: mu2e-mc1-worker-03, rc: 0, stdout: "empty mu2e.opensciencegrid.org"}
     # Fake slurped .k5login sources for roles/accounts/templates/k5login.j2.
     nfs_served: [{server: mu2e-mc1-worker-17.fnal.gov, path: /nfshome, mount: /nfshome}]
     nfs_clients: [131.225.246.21, 131.225.246.22]
@@ -67,6 +71,16 @@
         - {src: slurm_common/templates/logrotate-slurm.j2, dest: logrotate-slurm}
         - {src: accounts/templates/k5login.j2, dest: k5login}
         - {src: nfs/templates/mc1.exports.j2, dest: mc1.exports}
+        - {src: cvmfs/templates/default.local.j2, dest: cvmfs-default.local}
+
+    - name: Render default.local with an explicit proxy and a config repository
+      ansible.builtin.template:
+        src: "{{ roles_dir }}/cvmfs/templates/default.local.j2"
+        dest: "{{ out_dir }}/cvmfs-default.local.proxy"
+        mode: "0644"
+      vars:
+        mc1_cvmfs_http_proxy: "http://squid-a:3128|http://squid-b:3128;DIRECT"
+        mc1_cvmfs_config_repository: config-osg.opensciencegrid.org
 
     - name: Render the validation results template
       ansible.builtin.copy:

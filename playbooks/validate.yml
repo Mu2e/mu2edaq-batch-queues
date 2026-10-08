@@ -75,6 +75,16 @@
       failed_when: false
       when: v_nodes | length > 1
 
+    - name: CVMFS repositories readable from a job on each compute node
+      ansible.builtin.command: >-
+        runuser -u {{ v_user }} -- srun -N1 -w {{ item }} -D /tmp --time=1
+        bash -c 'for r in {{ mc1_cvmfs_repositories | join(" ") }}; do ls /cvmfs/$r | head -1 | grep -q . || echo "empty $r"; done'
+      loop: "{{ v_nodes }}"
+      register: v_cvmfs
+      changed_when: false
+      failed_when: false
+      when: mc1_cvmfs_enabled | bool
+
     - name: Accounting records for the sbatch jobs
       ansible.builtin.command: >-
         sacct -n -P -X -o JobID,State -j {{ v_sbatch.results | map(attribute='stdout') | select | join(',') }}
