@@ -31,3 +31,6 @@ collections/
 
 # Locally built RPM bundles (scripts/mc1-slurm-build-rpms)
 artifacts/
+
+# PDF build intermediate
+docs/pdf/*.html

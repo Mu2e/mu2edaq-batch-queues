@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Getting Started with Mu2e Batch in MC-1</title>
+<meta name="description" content="How to log in to the Mu2e MC-1 Slurm cluster, which accounts and disk areas to use, how to submit jobs and how to get results back.">
+<style>
+/* Self-contained: no external fonts, scripts or stylesheets, so the page works
+   on any static web server, including inside the DAQ enclave. */
+:root{
+  --bg:#f5f7f8; --surface:#ffffff; --ink:#1b2329; --muted:#5b6873; --line:#d9e0e5;
+  --accent:#2e6f8e; --accent-soft:#e6eef3; --code-bg:#eef2f5; --pre-bg:#f3f6f8;
+  --warn-bg:#fbf1db; --warn-ink:#7a5208; --ok:#2f8f5b;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#12181d; --surface:#1a222a; --ink:#e6ecf0; --muted:#98a6b1; --line:#2c3740;
+  --accent:#6fb1d0; --accent-soft:#1f2c35; --code-bg:#22303a; --pre-bg:#161e25;
+  --warn-bg:#3a2e14; --warn-ink:#e9c47a; --ok:#5fc38a; color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#12181d; --surface:#1a222a; --ink:#e6ecf0; --muted:#98a6b1; --line:#2c3740;
+  --accent:#6fb1d0; --accent-soft:#1f2c35; --code-bg:#22303a; --pre-bg:#161e25;
+  --warn-bg:#3a2e14; --warn-ink:#e9c47a; --ok:#5fc38a; color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 var(--sans)}
+.wrap{max-width:1080px;margin:0 auto;padding-inline:20px;display:grid;grid-template-columns:220px minmax(0,1fr);gap:40px}
+header.top{border-bottom:3px solid var(--accent);background:var(--surface)}
+header.top .inner{max-width:1080px;margin:0 auto;padding:28px 20px 22px}
+.eyebrow{margin:0;font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--accent);font-weight:600}
+h1{margin:4px 0 6px;font-size:clamp(26px,4vw,38px);line-height:1.15;letter-spacing:-.015em;text-wrap:balance}
+.lede{margin:0;color:var(--muted);max-width:62ch}
+.facts{display:flex;flex-wrap:wrap;gap:8px 22px;margin:16px 0 0;padding:0;list-style:none;font-size:14px}
+.facts li{display:flex;gap:6px;align-items:baseline}
+.facts b{font-weight:600}
+nav.toc{position:sticky;top:20px;align-self:start;padding-block:28px;font-size:14px}
+nav.toc p{margin:0 0 8px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+nav.toc ol{list-style:none;margin:0;padding:0;display:grid;gap:2px;counter-reset:s}
+nav.toc a{display:block;padding:5px 10px;border-left:2px solid var(--line);color:var(--ink);text-decoration:none}
+nav.toc a:hover,nav.toc a:focus-visible{border-left-color:var(--accent);color:var(--accent)}
+main{padding-block:28px 72px;min-width:0}
+section{padding-top:8px;margin-bottom:34px}
+h2{font-size:24px;margin:0 0 12px;padding-bottom:6px;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:baseline;text-wrap:balance}
+h2 .n{font:600 14px var(--mono);color:var(--accent)}
+h3{font-size:17px;margin:22px 0 6px}
+p{margin:0 0 12px;max-width:72ch}
+a{color:var(--accent)}
+code{font:0.88em var(--mono);background:var(--code-bg);padding:1px 5px;border-radius:4px;overflow-wrap:anywhere}
+.cmd{position:relative;margin:8px 0 16px}
+.cmd pre{margin:0;background:var(--pre-bg);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:6px;padding:12px 14px;padding-right:72px;overflow-x:auto;font:13.5px/1.5 var(--mono)}
+.cmd pre .c{color:var(--muted)}
+.copy{position:absolute;top:8px;right:8px;font:12px var(--sans);padding:3px 9px;border:1px solid var(--line);border-radius:4px;background:var(--surface);color:var(--ink);cursor:pointer}
+.copy:hover,.copy:focus-visible{border-color:var(--accent);color:var(--accent)}
+.copy.done{color:var(--ok);border-color:var(--ok)}
+.tbl{overflow-x:auto;margin:8px 0 16px}
+table{border-collapse:collapse;width:100%;background:var(--surface);border:1px solid var(--line);font-size:14.5px}
+th,td{padding:8px 11px;border-top:1px solid var(--line);text-align:left;vertical-align:top}
+th{background:var(--accent-soft);font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;border-top:0}
+.note{background:var(--warn-bg);color:var(--warn-ink);border-radius:6px;padding:10px 14px;margin:10px 0 16px;font-size:15px}
+.note b{color:inherit}
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin:10px 0 16px}
+.step{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;min-width:0}
+.step h3{margin-top:0}
+.pill{display:inline-block;font:600 11px var(--sans);letter-spacing:.05em;text-transform:uppercase;padding:2px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent)}
+ul{padding-left:20px;margin:0 0 12px}
+li{margin:3px 0}
+footer{border-top:1px solid var(--line);color:var(--muted);font-size:13px}
+footer .inner{max-width:1080px;margin:0 auto;padding:18px 20px 28px;display:flex;flex-wrap:wrap;gap:8px 24px;justify-content:space-between}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (max-width:820px){.wrap{grid-template-columns:minmax(0,1fr);gap:0}nav.toc{position:static;padding-block:16px 0}nav.toc ol{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}}
+@media print{nav.toc,.copy{display:none}.wrap{display:block}body{background:#fff}}
+</style>
+</head>
+<body>
+<header class="top"><div class="inner">
+  <p class="eyebrow">Mu2e DAQ · MC-1 cluster</p>
+  <h1>Getting Started with Mu2e Batch in MC-1</h1>
+  <p class="lede">Slurm runs on the MC-1 trigger workers. Log in to worker-01, submit jobs to workers 02–18, then collect your results.</p>
+  <ul class="facts">
+    <li><span>Submit node</span> <b><code>mu2e-mc1-worker-01</code></b></li>
+    <li><span>Compute</span> <b>17 nodes, partition <code>mc1</code></b></li>
+    <li><span>Slurm</span> <b>26.05</b></li>
+    <li><span>Gateway</span> <b><code>g2gateway01</code></b></li>
+  </ul>
+</div></header>
+
+<div class="wrap">
+<nav class="toc" aria-label="On this page">
+  <p>On this page</p>
+  <ol>
+    <li><a href="#access">1 · Cluster access</a></li>
+    <li><a href="#accounts">2 · Login accounts</a></li>
+    <li><a href="#disks">3 · Disk areas</a></li>
+    <li><a href="#submit">4 · Submitting jobs</a></li>
+    <li><a href="#retrieve">5 · Getting data back</a></li>
+    <li><a href="#about">About</a></li>
+  </ol>
+</nav>
+
+<main>
+<section id="access">
+  <h2><span class="n">01</span>Cluster access via ssh</h2>
+  <p>The workers sit inside the DAQ enclave and have no direct login. You reach them through the gateway <code>g2gateway01.fnal.gov</code>, using your Fermilab Kerberos ticket. There is no password or ssh-key login.</p>
+  <div class="steps">
+    <div class="step"><span class="pill">Step 1</span><h3>Get a ticket</h3>
+      <div class="cmd"><pre>kinit &lt;username&gt;@FNAL.GOV
+klist</pre></div></div>
+    <div class="step"><span class="pill">Step 2</span><h3>Log in through the gateway</h3>
+      <div class="cmd"><pre>ssh -J mu2eshift@g2gateway01.fnal.gov \
+    mu2ebatch@mu2e-mc1-worker-01.fnal.gov</pre></div></div>
+  </div>
+  <p><b>Optional:</b> add this to <code>~/.ssh/config</code>, and <code>ssh mc1</code> is all you need to type.</p>
+  <div class="cmd"><pre>Host mc1
+    HostName mu2e-mc1-worker-01.fnal.gov
+    User mu2ebatch
+    ProxyJump mu2eshift@g2gateway01.fnal.gov
+    GSSAPIAuthentication yes
+    GSSAPIDelegateCredentials yes</pre></div>
+  <div class="tbl"><table>
+    <thead><tr><th>If you see</th><th>It means</th><th>Do this</th></tr></thead>
+    <tbody>
+      <tr><td><code>Permission denied (gssapi-…)</code></td><td>No ticket, an expired one, or your principal is not authorised for that account</td><td>Run <code>kinit</code> again. If it still fails, ask a DAQ expert to add your principal.</td></tr>
+      <tr><td>A hang, then a timeout</td><td>Wrong gateway</td><td>Use <code>g2gateway01</code>, not <code>g2gateway02</code>.</td></tr>
+      <tr><td><code>.Xauthority does not exist</code></td><td>Harmless warning on the first login</td><td>Ignore it.</td></tr>
+    </tbody>
+  </table></div>
+  <p>Windows 11: the built-in OpenSSH client supports <code>-J</code>. Kerberos is simplest from WSL2: run <code>kinit</code> and <code>ssh</code> inside the Linux shell.</p>
+</section>
+
+<section id="accounts">
+  <h2><span class="n">02</span>Login accounts</h2>
+  <p>Batch work runs under shared Mu2e accounts, not personal ones. You can log in to an account if your Kerberos principal is listed in its <code>~/.k5login</code>.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Account</th><th>Use it for</th><th>Submit jobs</th></tr></thead>
+    <tbody>
+      <tr><td><code>mu2ebatch</code></td><td>Batch production and analysis. <b>Start here.</b></td><td>yes</td></tr>
+      <tr><td><code>mu2eshift</code></td><td>Shifter account; DAQ shift tools</td><td>yes</td></tr>
+      <tr><td><code>mu2edaq</code></td><td>DAQ expert account</td><td>yes</td></tr>
+    </tbody>
+  </table></div>
+  <ul>
+    <li><b>Same account on every node:</b> the UID and the login environment are identical everywhere (<code>~/.bashrc</code>, aliases, the <code>~/bin</code> tools).</li>
+    <li><b>Who may log in:</b> <code>mu2ebatch</code> accepts everyone authorised for <code>mu2eshift</code> or <code>mu2edaq</code>.</li>
+    <li><b>Only these three can submit:</b> Slurm rejects jobs from any other user.</li>
+  </ul>
+  <p class="note"><b>Known issue:</b> an interactive login as <code>mu2ebatch</code> prints a Kerberos <code>Fail</code> line, because the account has no group keytab yet. Jobs are not affected. If you need to ssh onward from the node, run <code>kinit &lt;username&gt;@FNAL.GOV</code> there first.</p>
+</section>
+
+<section id="disks">
+  <h2><span class="n">03</span>Available disk areas</h2>
+  <p class="note"><b>Every disk area is local to one node.</b> There is no shared filesystem yet: a file written on worker-05 exists only on worker-05.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Path</th><th>Where</th><th>Size</th><th>Use it for</th></tr></thead>
+    <tbody>
+      <tr><td><code>/home/&lt;account&gt;</code></td><td>every node (separate copies)</td><td>15 GB per node, shared by all accounts</td><td>Login files and small scripts. Not for data.</td></tr>
+      <tr><td><code>/scratch</code></td><td>every node</td><td>100 GB</td><td>Temporary files while a job runs</td></tr>
+      <tr><td><code>/data-local</code></td><td>every node</td><td>500 GB</td><td>Job output until you collect it</td></tr>
+      <tr><td><code>/tmp</code></td><td>every node</td><td>50 GB</td><td>Small temporary files</td></tr>
+      <tr><td><code>/nfshome</code></td><td>worker-17 only</td><td>2.9 TB</td><td>Shared home area, <b>once NFS is enabled</b></td></tr>
+      <tr><td><code>/nfsdata</code></td><td>worker-18 only</td><td>2.9 TB</td><td>Shared data area, <b>once NFS is enabled</b></td></tr>
+    </tbody>
+  </table></div>
+  <p>Work under your own directory, <code>/scratch/$USER</code> and <code>/data-local/$USER</code>. This creates both on every node:</p>
+  <div class="cmd"><pre>srun -N17 --chdir=/tmp mkdir -p /data-local/$USER /scratch/$USER</pre></div>
+  <p>Nothing is backed up or cleaned automatically. Collect your results, then delete what you no longer need.</p>
+</section>
+
+<section id="submit">
+  <h2><span class="n">04</span>Submission examples</h2>
+  <p>Run all of these on the submit node, worker-01.</p>
+  <h3>Check the cluster</h3>
+  <div class="cmd"><pre>sinfo                                       <span class="c"># mc1* up, 17 nodes idle</span>
+sinfo -N -l                                 <span class="c"># per-node CPUs, memory, state</span>
+srun -N1 hostname -s                        <span class="c"># one command on any node</span>
+srun -N17 --chdir=/tmp hostname -s | sort   <span class="c"># one task on every node</span></pre></div>
+
+  <h3>A batch job: <code>hello.sbatch</code></h3>
+  <div class="cmd"><pre>#!/bin/bash
+#SBATCH --job-name=hello
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=8G
+#SBATCH --time=00:10:00
+#SBATCH --chdir=/data-local
+#SBATCH --output=/data-local/%u/slurm-%x-%j.out
+
+echo "job $SLURM_JOB_ID on $(hostname -s) with $SLURM_CPUS_PER_TASK CPUs"
+srun sleep 5</pre></div>
+  <div class="cmd"><pre>sbatch hello.sbatch                <span class="c"># → Submitted batch job 56</span>
+squeue -u $USER
+sacct -j 56 -X -o JobID,JobName,State,Elapsed,NodeList%20,ExitCode</pre></div>
+  <p>The output directory must exist on the node that runs the job, so create it everywhere first (section 3). <code>%u</code> is your user name, <code>%x</code> the job name and <code>%j</code> the job id.</p>
+
+  <h3>Many independent tasks (job array)</h3>
+  <div class="cmd"><pre>#!/bin/bash
+#SBATCH --job-name=sweep
+#SBATCH --array=0-99%34            <span class="c"># 100 tasks, at most 34 at once</span>
+#SBATCH --cpus-per-task=1
+#SBATCH --mem-per-cpu=2G
+#SBATCH --time=01:00:00
+#SBATCH --chdir=/scratch
+#SBATCH --output=/data-local/%u/sweep-%A_%a.out
+
+./my_program --index "$SLURM_ARRAY_TASK_ID" \
+             --out /data-local/$USER/sweep/result_$SLURM_ARRAY_TASK_ID.root</pre></div>
+
+  <h3>Multi-node job with its input copied to every node</h3>
+  <div class="cmd"><pre>#!/bin/bash
+#SBATCH --nodes=4
+#SBATCH --ntasks-per-node=8
+#SBATCH --time=02:00:00
+#SBATCH --output=/data-local/%u/multi-%j.out
+
+sbcast /data-local/$USER/input.root /scratch/$USER/input.root
+srun my_program /scratch/$USER/input.root</pre></div>
+
+  <h3>Interactive session</h3>
+  <div class="cmd"><pre>salloc -N1 -c8 --mem=16G --time=1:00:00
+srun --pty bash</pre></div>
+
+  <h3>Watching and controlling jobs</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>Task</th><th>Command</th></tr></thead>
+    <tbody>
+      <tr><td>My jobs</td><td><code>squeue -u $USER</code></td></tr>
+      <tr><td>Why is my job pending?</td><td><code>squeue -j &lt;id&gt; -o "%i %T %r"</code></td></tr>
+      <tr><td>Full job details</td><td><code>scontrol show job &lt;id&gt;</code></td></tr>
+      <tr><td>Cancel one, or all of mine</td><td><code>scancel &lt;id&gt;</code> · <code>scancel -u $USER</code></td></tr>
+      <tr><td>Today's history</td><td><code>sacct -S today -X -o JobID,JobName,State,Elapsed,MaxRSS,NodeList%20</code></td></tr>
+    </tbody>
+  </table></div>
+  <ul>
+    <li><b>Memory is enforced.</b> Go over your request and the job is killed (<code>OUT_OF_MEMORY</code>). With no request, a job gets 2000 MB per CPU.</li>
+    <li><b>Node sizes differ.</b> Workers 02–16 have 16 CPUs; 17–18 have 32 (16 cores × 2 threads). Allocations are whole cores. Every node has about 60 GB of memory for jobs.</li>
+    <li><b>Always set <code>--time</code>.</b> Short jobs with an accurate time start sooner, because the scheduler can fit them into gaps.</li>
+  </ul>
+</section>
+
+<section id="retrieve">
+  <h2><span class="n">05</span>Getting data back</h2>
+  <p>Output stays on the compute node that ran the job. Getting it to your laptop takes two steps: from the node to worker-01, then from worker-01 to your machine.</p>
+  <h3>Step 1 · From the compute node to worker-01</h3>
+  <div class="cmd"><pre>node=$(sacct -j &lt;id&gt; -X -n -P -o NodeList)     <span class="c"># -P: don't truncate the name</span>
+
+<span class="c"># look at one file</span>
+srun -w $node --chdir=/tmp cat /data-local/$USER/slurm-hello-&lt;id&gt;.out
+
+<span class="c"># copy a directory back, streamed through Slurm (works for every account)</span>
+mkdir -p /data-local/$USER/collected
+srun -w $node --chdir=/tmp tar -C /data-local/$USER -cf - myrun \
+    | tar -C /data-local/$USER/collected -xf -</pre></div>
+  <p>After an array or multi-node job, collect from every node:</p>
+  <div class="cmd"><pre>for n in $(sinfo -h -N -o %N | sort -u); do
+  srun -w $n --chdir=/tmp tar -C /data-local/$USER -cf - sweep 2&gt;/dev/null \
+    | tar -C /data-local/$USER/collected -xf -
+done</pre></div>
+  <h3>Step 2 · From worker-01 to your machine</h3>
+  <p>Run these on your own computer, with a valid ticket:</p>
+  <div class="cmd"><pre>scp -J mu2eshift@g2gateway01.fnal.gov \
+    mu2ebatch@mu2e-mc1-worker-01.fnal.gov:/data-local/mu2ebatch/collected/myrun/out.root .
+
+rsync -av -e "ssh -J mu2eshift@g2gateway01.fnal.gov" \
+    mu2ebatch@mu2e-mc1-worker-01.fnal.gov:/data-local/mu2ebatch/collected/ ./collected/</pre></div>
+  <p>With the <code>mc1</code> shortcut from section 1, the first command becomes <code>scp mc1:/data-local/mu2ebatch/collected/myrun/out.root .</code></p>
+  <p>Clean up afterwards:</p>
+  <div class="cmd"><pre>srun -N17 --chdir=/tmp rm -rf /data-local/$USER/myrun</pre></div>
+</section>
+
+<section id="about">
+  <h2><span class="n">··</span>About</h2>
+  <p>Slurm 26.05.4, built from SchedMD source for AlmaLinux 9 and 10, with MUNGE authentication and slurmdbd/MariaDB accounting on worker-01. The configuration is managed with Ansible in <code>Mu2e/mu2edaq-batch-queues</code>, which also holds the full user guide (<code>docs/GETTING-STARTED.md</code>, plus a PDF) and the operator documentation.</p>
+  <p>For cluster or account problems, contact the Mu2e DAQ experts. Include the job id and the output of <code>scontrol show job &lt;id&gt;</code>.</p>
+  <p>This page is a single self-contained HTML file with no external dependencies, so any static web server can host it.</p>
+</section>
+</main>
+</div>
+
+<footer><div class="inner">
+  <span>Getting Started with Mu2e Batch in MC-1</span>
+  <span>Last verified on the cluster: 2026-10-08</span>
+</div></footer>
+
+<script>
+/* Copy buttons for every command block; falls back to selecting the text. */
+document.querySelectorAll('.cmd').forEach(function (box) {
+  var pre = box.querySelector('pre');
+  var btn = document.createElement('button');
+  btn.type = 'button'; btn.className = 'copy'; btn.textContent = 'Copy';
+  btn.setAttribute('aria-label', 'Copy this command');
+  btn.addEventListener('click', function () {
+    var text = Array.prototype.map.call(pre.childNodes, function (n) {
+      return n.nodeType === 1 && n.classList.contains('c') ? '' : n.textContent;
+    }).join('').replace(/[ \t]+$/gm, '');
+    function done(ok) { btn.textContent = ok ? 'Copied' : 'Selected'; btn.classList.toggle('done', ok);
+      setTimeout(function () { btn.textContent = 'Copy'; btn.classList.remove('done'); }, 1600); }
+    function select() { var r = document.createRange(); r.selectNodeContents(pre);
+      var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); done(false); }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { done(true); }, select);
+    } else { select(); }
+  });
+  box.appendChild(btn);
+});
+</script>
+</body>
+</html>

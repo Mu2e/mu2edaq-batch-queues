@@ -39,10 +39,33 @@ roles/    preflight storage accounts munge slurm_common firewall slurmdbd slurmc
 scripts/  mc1-slurm-deploy           wrapper: CLI > env > .env > config overrides
           mc1-slurm-presurvey        read-only host survey over ssh
 man/      man1/                      man pages for every script
-docs/     DESIGN.md INSTALL.md USAGE.md   design; install/operations; submitting jobs
+docs/     GETTING-STARTED.md/.pdf     user guide (also web/index.html)
+          DESIGN.md INSTALL.md USAGE.md   design; install/operations; job reference
+web/      index.html                 deployable getting-started page
 tests/    pytest: templates rendered by real Ansible, config consistency, wrapper
 results/  survey and validation output (git-ignored)
 ```
+
+## User documentation
+
+| File | What |
+|------|------|
+| `docs/GETTING-STARTED.md` / `.pdf` | Getting Started with Mu2e Batch in MC-1: access, accounts, disk areas, submission, getting data back |
+| `docs/USAGE.md` | Longer job-submission reference |
+| `web/index.html` | The getting-started guide as a deployable web page |
+
+Rebuild the PDF after editing the Markdown (needs pandoc and WeasyPrint):
+
+```sh
+cd docs && pandoc GETTING-STARTED.md -s -o pdf/GETTING-STARTED.html --css print.css \
+    --metadata pagetitle="Getting Started with Mu2e Batch in MC-1" \
+  && (cd pdf && weasyprint GETTING-STARTED.html ../GETTING-STARTED.pdf)
+```
+
+Deploy the web page by copying the one file to any static web server, for
+example `scp web/index.html <host>:/var/www/html/mc1-batch/index.html`. It
+loads no external fonts, scripts or stylesheets, so it also works inside the
+enclave. It follows the reader's light or dark theme and prints cleanly.
 
 ## Tests
 
