@@ -39,7 +39,7 @@ roles/    preflight storage accounts munge slurm_common firewall slurmdbd slurmc
 scripts/  mc1-slurm-deploy           wrapper: CLI > env > .env > config overrides
           mc1-slurm-presurvey        read-only host survey over ssh
 man/      man1/                      man pages for every script
-docs/     DESIGN.md INSTALL.md       design decisions; install and operations
+docs/     DESIGN.md INSTALL.md USAGE.md   design; install/operations; submitting jobs
 tests/    pytest: templates rendered by real Ansible, config consistency, wrapper
 results/  survey and validation output (git-ignored)
 ```
