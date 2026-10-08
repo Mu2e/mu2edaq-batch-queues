@@ -51,6 +51,12 @@ mc1_job_accounts:
     # any principals listed in k5login. Read at deploy time, never stored here.
     k5login_from: [mu2eshift, mu2edaq]
     k5login: []
+    # Login environment set up the way mu2eshift/mu2edaq are: a copy of the
+    # reference account's daq-shifter-tools checkout (same commit), then its
+    # install-login.sh run as this account (dotfiles, ~/bin, ~/.mu2edaq/env),
+    # plus the files below copied from the reference account.
+    login_env_from: mu2eshift
+    login_files_copy: [.gitconfig, .ssh/config]
   - name: mu2eshift
     create: false
     fix_home_ownership: true

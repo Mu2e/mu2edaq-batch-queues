@@ -7,7 +7,8 @@
   ansible.builtin.command: getent passwd {{ item }}
   loop: >-
     {{ (mc1_job_accounts | rejectattr('create') | map(attribute='name') | list
-       + mc1_job_accounts | selectattr('create') | map(attribute='k5login_from', default=[]) | flatten) | unique }}
+       + mc1_job_accounts | selectattr('create') | map(attribute='k5login_from', default=[]) | flatten
+       + mc1_job_accounts | selectattr('create') | selectattr('login_env_from', 'defined') | map(attribute='login_env_from') | list) | unique }}
   register: acct_pw
   changed_when: false
   failed_when: false
@@ -57,6 +58,18 @@
   loop_control:
     label: "{{ item.name }}:{{ item.uid }}"
 
+- name: Home directory mode of new job accounts (750, as mu2eshift/mu2edaq)
+  ansible.builtin.file:
+    path: "{{ item.home }}"
+    state: directory
+    owner: "{{ item.name }}"
+    group: "{{ item.group }}"
+    mode: "0750"
+  loop: "{{ mc1_job_accounts | selectattr('create') | list }}"
+  loop_control:
+    label: "{{ item.home }}"
+  ignore_errors: "{{ ansible_check_mode }}"
+
 - name: Read the source accounts' .k5login files
   ansible.builtin.slurp:
     src: "{{ acct_passwd[item.1][5] }}/.k5login"
@@ -73,13 +86,68 @@
     dest: "{{ acct.home }}/.k5login"
     owner: "{{ acct.name }}"
     group: "{{ acct.group }}"
-    mode: "0644"
+    mode: "0600"                 # as mu2eshift's
   loop: "{{ mc1_job_accounts | selectattr('create') | list }}"
   loop_control:
     loop_var: acct
     label: "{{ acct.name }}"
   when: (acct.k5login_from | default([]) | length > 0) or (acct.k5login | default([]) | length > 0)
   ignore_errors: "{{ ansible_check_mode }}"   # home does not exist yet in a first --check
+
+# ---- login environment, the same way the other mu2e accounts have it ----
+
+- name: Copy the reference account's daq-shifter-tools checkout (same commit)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    cp -a {{ src_home }}/daq-shifter-tools {{ acct.home }}/daq-shifter-tools
+    chown -R {{ acct.name }}:{{ acct.group }} {{ acct.home }}/daq-shifter-tools
+  args:
+    creates: "{{ acct.home }}/daq-shifter-tools/install-login.sh"
+    executable: /bin/bash
+  vars:
+    src_home: "{{ acct_passwd[acct.login_env_from][5] }}"
+  loop: "{{ mc1_job_accounts | selectattr('create') | selectattr('login_env_from', 'defined') | list }}"
+  loop_control:
+    loop_var: acct
+    label: "{{ acct.name }} <- {{ acct.login_env_from }}"
+  when: acct_passwd[acct.login_env_from][5] is match('^/')
+
+- name: Run install-login.sh as the account (dotfiles, ~/bin, ~/.mu2edaq/env)
+  ansible.builtin.command: >-
+    runuser -u {{ acct.name }} -- env HOME={{ acct.home }}
+    {{ acct.home }}/daq-shifter-tools/install-login.sh -d {{ acct.home }}
+  args:
+    creates: "{{ acct.home }}/.mu2edaq/env"
+  loop: "{{ mc1_job_accounts | selectattr('create') | selectattr('login_env_from', 'defined') | list }}"
+  loop_control:
+    loop_var: acct
+    label: "{{ acct.name }}"
+
+- name: ~/.ssh for accounts that copy files into it
+  ansible.builtin.file:
+    path: "{{ acct.home }}/.ssh"
+    state: directory
+    owner: "{{ acct.name }}"
+    group: "{{ acct.group }}"
+    mode: "0700"
+  loop: "{{ mc1_job_accounts | selectattr('create') | selectattr('login_files_copy', 'defined') | list }}"
+  loop_control:
+    loop_var: acct
+    label: "{{ acct.name }}"
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: Copy the remaining login files from the reference account
+  ansible.builtin.copy:
+    src: "{{ acct_passwd[item.0.login_env_from][5] }}/{{ item.1 }}"
+    dest: "{{ item.0.home }}/{{ item.1 }}"
+    remote_src: true
+    owner: "{{ item.0.name }}"
+    group: "{{ item.0.group }}"
+    mode: preserve
+  loop: "{{ mc1_job_accounts | selectattr('create') | selectattr('login_files_copy', 'defined') | list | subelements('login_files_copy') }}"
+  loop_control:
+    label: "{{ item.0.name }}: {{ item.1 }}"
+  ignore_errors: "{{ ansible_check_mode }}"
 
 - name: Repair ownership of existing job-account home directories
   ansible.builtin.file:
