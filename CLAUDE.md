@@ -9,12 +9,21 @@ trigger worker cluster** using Ansible, run from an operator workstation.
 
 - `mu2e-mc1-worker-01.fnal.gov` is the controller and submit node. It runs
   slurmctld, slurmdbd and MariaDB, and no slurmd.
-- Workers 02 and 03 are compute nodes. Workers 04–16 are declared
-  `State=FUTURE`.
+- Workers 02–18 are compute nodes (partition `mc1`); 17–18 run AlmaLinux 10,
+  the rest AlmaLinux 9. Slurm 26.05.4 is built locally (`mc1-slurm-build-rpms`)
+  and installed from `artifacts/rpms/` (git-ignored, present only in the
+  worktree `wt/batch-queues-ansible`).
+- Every node has `/scratch` (100G) and `/data-local` (500G) LVs; worker-17
+  has `/nfshome`, worker-18 `/nfsdata`. NFS export is blocked by SLAM Puppet
+  (`nfs::service`), so the `nfs` role is gated off.
+- CVMFS is installed by the site. The `cvmfs` role is off
+  (`mc1_cvmfs_enabled: false`) and must not overwrite the site config.
 - Every login goes by ProxyJump as **`mu2eshift@g2gateway01.fnal.gov`**, the
   user's rule, then as root on the workers.
 
-Design decisions D1–D11 and their reasons are in `docs/DESIGN.md`.
+Design decisions D1–D23 and their reasons are in `docs/DESIGN.md`. The user guide
+is `docs/GETTING-STARTED.md` (+ `.pdf`, rebuilt per README) and `web/index.html`;
+keep all three in step.
 
 Status, open decisions and the test and compatibility matrices live in the
 private tracker artifact https://claude.ai/artifact/VRZRbwR9QMDSQybSaJRxZG. Its
@@ -35,6 +44,7 @@ venv/bin/python -m pytest -q tests/test_render.py::test_slurm_conf_nodes   # one
 scripts/mc1-slurm-deploy deploy --print          # show the ansible-playbook command and overrides
 scripts/mc1-slurm-deploy preflight               # read-only, touches the cluster
 scripts/mc1-slurm-deploy deploy [--apply]        # --check --diff unless --apply
+scripts/mc1-slurm-deploy {storage,accounts,firewall,nfs,cvmfs} [--apply]   # one role
 scripts/mc1-slurm-deploy validate                # results/validate-<UTC>.json
 scripts/mc1-slurm-presurvey [-n]                 # raw read-only host survey (text reports)
 ```
@@ -82,8 +92,8 @@ the user the command to run with the `!` prefix.
 - **Remote survey pattern** (`scripts/mc1-slurm-presurvey`). The remote script
   goes base64-encoded and runs as `bash <(…)` under `ssh -n`. Never pipe a
   remote script into `bash -s`: `dnf` reads the rest of it as prompt answers.
-- **Cluster facts behind the design.** Workers 04–16 are absent. Hosts run
-  AlmaLinux 9.8. Home directories are local, not NFS, so job output stays on
+- **Cluster facts behind the design.** Hosts run AlmaLinux 9.8 (01–16) and
+  10.2 (17–18). Home directories are local, not NFS, so job output stays on
   the compute node. The gateway has OpenVox/Puppet repos, which is why
   preflight checks for a running Puppet agent. The detailed posture is in
   `../mu2edaq-trigger-cluster/docs/FINDINGS.md`, a local-only repo, and in the
@@ -98,13 +108,13 @@ beside `config/inventory.yml`. Precedence: `--set`/options > `MC1_*` env >
 ```yaml
 mc1_jump: mu2eshift@g2gateway01.fnal.gov
 mc1_ssh_user: root
-mc1_puppet_policy: fail            # fail | warn
+mc1_puppet_policy: warn            # fail | warn
 mc1_service_accounts: [{name: munge, uid: 450, gid: 450, ...}, {name: slurm, uid: 451, gid: 451, ...}]
 mc1_job_accounts:                  # create:true → new local account (uid REQUIRED)
   - {name: mu2ebatch, create: true, uid: 51329, group: mu2e, gid: 9914, k5login_from: [mu2eshift, mu2edaq]}
   - {name: mu2eshift, create: false, fix_home_ownership: true}
 slurm_ports: {slurmctld: 6817, slurmd: 6818, slurmdbd: 6819}
-slurm_future_nodelist: "mu2e-mc1-worker-[04-16]"
+slurm_future_nodelist: ""            # all 18 workers are live
 slurm_partitions: [{name: mc1, default: true, max_time: INFINITE}]
 ```
 
@@ -120,6 +130,7 @@ defects). Those belong in `docs/private/` and the private tracker.
 
 ## Testing
 
-`venv/bin/python -m pytest -q tests`: 30 tests, offline, about 10 s. Live
+`venv/bin/python -m pytest -q tests`: 41 tests, offline, about 13 s; also run
+them under a Python 3.9 / ansible-core 2.15 venv. Live
 validation on the cluster is `scripts/mc1-slurm-deploy validate`. Its JSON keys
 match the tracker's test-matrix rows.
