@@ -59,6 +59,16 @@ def test_deploy_apply_drops_check(deploy):
     assert cmd[-2:] == ["-e", "@/x.json"]
 
 
+@pytest.mark.parametrize("action", ["deploy", "storage", "firewall", "accounts", "nfs", "cvmfs", "healthcheck"])
+def test_changing_actions_default_to_check_mode(deploy, action):
+    assert "--check" in deploy.build_command(action, args_for(deploy, [action]), None, "ap")
+    assert "--check" not in deploy.build_command(action, args_for(deploy, [action, "--apply"]), None, "ap")
+
+
+def test_only_preflight_and_validate_are_read_only(deploy):
+    assert deploy.READ_ONLY == {"preflight", "validate"} and deploy.READ_ONLY <= set(deploy.PLAYBOOKS)
+
+
 def test_preflight_has_no_check_flag(deploy):
     cmd = deploy.build_command("preflight", args_for(deploy, ["preflight", "--limit", "slurm_compute", "-vv"]), None, "ap")
     assert "--check" not in cmd

@@ -123,6 +123,19 @@ def test_config_precedence(tmp_path, monkeypatch):
     assert c["web"]["refresh_seconds"] == 300   # default kept by the deep merge
 
 
+def test_unreadable_dotenv_is_ignored(tmp_path, monkeypatch):
+    d = tmp_path / "noread"
+    d.mkdir()
+    (d / ".env").write_text("MC1_HC_PARTITION=x\n")
+    (d / ".env").chmod(0)
+    monkeypatch.chdir(d)
+    try:
+        c = config.load(environ={"MC1_HC_CONFIG": str(tmp_path / "x.yaml")})
+        assert c["partition"] in ("mc1", "x")    # root can still read it; no exception either way
+    finally:
+        (d / ".env").chmod(0o644)
+
+
 def test_config_set_types_and_errors(tmp_path):
     c = config.load(environ={"MC1_HC_CONFIG": str(tmp_path / "x.yaml")},
                     sets=["mail.enabled=false", "srun_immediate=30"])

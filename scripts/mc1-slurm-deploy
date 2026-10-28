@@ -9,6 +9,7 @@ Actions:
   cvmfs       CVMFS client and /cvmfs/<repo> mounts; --check --diff unless --apply
   accounts    service/job accounts and .k5login only; --check --diff unless --apply
   firewall    cluster firewalld zone only; --check --diff unless --apply
+  healthcheck mc1-healthcheck, cron, status site on worker-01; --check --diff unless --apply
   validate    post-install test jobs; writes results/validate-<UTC>.json
 
 Override order (highest wins): command line > environment (MC1_*) > .env >
@@ -41,6 +42,7 @@ PLAYBOOKS = {
     "validate": "playbooks/validate.yml",
     "healthcheck": "playbooks/healthcheck.yml",
 }
+READ_ONLY = {"preflight", "validate"}
 # Environment variables with a dedicated Ansible variable.
 ENV_VARS = {
     "MC1_JUMP": "mc1_jump",
@@ -127,7 +129,9 @@ def find_ansible_playbook() -> Optional[str]:
 def build_command(action: str, args: argparse.Namespace, extra_file: Optional[str],
                   exe: str) -> List[str]:
     cmd = [exe, str(ROOT / PLAYBOOKS[action])]
-    if action in ("deploy", "storage", "firewall", "accounts", "nfs", "cvmfs"):
+    # Safe by default: every action that can change the cluster gets
+    # --check --diff unless --apply; only the read-only ones run as they are.
+    if action not in READ_ONLY:
         cmd += ["--diff"] if args.apply else ["--check", "--diff"]
     if args.limit:
         cmd += ["--limit", args.limit]

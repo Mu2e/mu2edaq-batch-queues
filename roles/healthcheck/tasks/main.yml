@@ -136,6 +136,8 @@
 
 - name: First run (no mail), so the pages exist
   ansible.builtin.command: runuser -u {{ mc1_hc_user }} -- /usr/local/bin/mc1-healthcheck run --no-mail
+  args:
+    chdir: "{{ mc1_hc_state_dir }}"   # runuser keeps the cwd; /root is unreadable to the job account
   register: hc_first
   changed_when: true
   failed_when: hc_first.rc not in [0, 1, 2]

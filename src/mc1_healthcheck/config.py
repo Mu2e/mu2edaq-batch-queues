@@ -105,7 +105,7 @@ def parse_dotenv(path):
                 if len(v) >= 2 and v[0] == v[-1] and v[0] in "'\"":
                     v = v[1:-1]
                 out[k.strip()] = v
-    except FileNotFoundError:
+    except OSError:      # absent, or unreadable (e.g. cwd /root under runuser)
         pass
     return out
 
