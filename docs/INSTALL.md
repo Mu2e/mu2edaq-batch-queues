@@ -97,7 +97,9 @@ scripts/mc1-slurm-deploy healthcheck --apply  # ends with one run (no mail) and 
 
 httpd on worker-01 serves the site to loopback clients and to the cluster nodes
 (`Require ip` plus `http` in `10_mc1_cluster` on worker-01; `mc1_hc_web_cluster_access`).
-On any MC1 node: `curl -s http://mu2e-mc1-worker-01.fnal.gov/status.json`.
+On any MC1 node: `curl -s http://mu2e-mc1-worker-01.fnal.gov/status.json`. httpd also
+admits 131.225.0.0/16 (`mc1_hc_web_allow_nets`), but other FNAL hosts are still
+rejected by the site firewall (50_FNAL) until SCD opens port 80.
 From anywhere else the site firewall rejects port 80, so use the tunnel:
 
 ```sh

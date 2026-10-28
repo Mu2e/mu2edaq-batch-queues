@@ -1,9 +1,9 @@
 # {{ ansible_managed }}
 # mc1-healthcheck status site (D26). httpd listens on {{ mc1_hc_web_listen }} (Listen in
-# httpd.conf). Readers: loopback (ssh tunnels){{ ' and the cluster members below' if hc_web_allow | default([]) else '' }};
-# several Require lines mean any of them. The firewall opens port 80 to the
-# cluster members only (http in {{ mc1_fw_zone }} on this host); 50_FNAL rejects
-# it for everyone else.
+# httpd.conf). httpd admits loopback (ssh tunnels) and the Require ip list below;
+# several Require lines mean any of them. The firewall is the narrower gate:
+# port 80 is open to the cluster members only (http in {{ mc1_fw_zone }} on this
+# host), and 50_FNAL rejects it for every other address.
 ServerName {{ inventory_hostname }}
 ServerTokens Prod
 ServerSignature Off
@@ -12,8 +12,9 @@ DocumentRoot "{{ mc1_hc_web_dir }}"
     Options -Indexes -FollowSymLinks
     AllowOverride None
     Require local
-{% if hc_web_allow | default([]) %}
-    Require ip {{ hc_web_allow | join(' ') }}
+{% set allow = (mc1_hc_web_allow_nets | default([])) + (hc_web_allow | default([])) %}
+{% if allow %}
+    Require ip {{ allow | unique | join(' ') }}
 {% endif %}
 </Directory>
 <FilesMatch "\.(json|html)$">

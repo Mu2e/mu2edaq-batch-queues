@@ -240,7 +240,9 @@ status.json, history.json.
 .I /etc/httpd/conf.d/mc1-status.conf
 httpd site: loopback clients, plus the cluster members' addresses (Require ip) when
 .B mc1_hc_web_cluster_access
-is true; the firewall opens port 80 to the same members only.
+is true, and the networks in
+.B mc1_hc_web_allow_nets
+(default 131.225.0.0/16). The firewall opens port 80 to the cluster members only.
 .SH EXAMPLES
 On the controller, as mu2ebatch:
 .PP

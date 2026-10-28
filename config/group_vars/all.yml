@@ -196,6 +196,10 @@ mc1_hc_web_dir: /var/www/mc1-status
 mc1_hc_web_listen: "80"               # httpd Listen: all addresses; reach is set by Require local + firewall (D26)
 mc1_hc_tunnel_port: 8081               # local port suggested for the ssh tunnel
 mc1_hc_web_cluster_access: true       # cluster nodes may read http://worker-01/: Require ip + http in mc1_fw_zone on 01
+# Extra networks for httpd Require ip. The firewall still decides who reaches
+# port 80: today only the cluster members; other FNAL hosts land in 50_FNAL
+# (Puppet, REJECT) until SCD opens it.
+mc1_hc_web_allow_nets: [131.225.0.0/16]
 mc1_hc_cron_minute: "*/30"
 mc1_hc_cron_hour: "*"
 mc1_hc_mail_to: [anorman@fnal.gov]

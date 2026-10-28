@@ -189,7 +189,7 @@ def test_healthcheck_httpd_and_wrapper(rendered):
     conf = (rendered / "httpd-mc1-status.conf").read_text()
     assert 'DocumentRoot "/var/www/mc1-status"' in conf and "Require local" in conf
     assert "httpd listens on 80 " in conf
-    assert "    Require ip 131.225.246.21 131.225.246.22\n" in conf
+    assert "    Require ip 131.225.0.0/16 131.225.246.21 131.225.246.22\n" in conf
     assert "Options -Indexes" in conf
     wrapper = (rendered / "mc1-healthcheck").read_text()
     assert wrapper.startswith("#!/usr/bin/python3") and 'sys.path.insert(0, "/opt/mc1-healthcheck/lib")' in wrapper
