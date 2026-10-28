@@ -1,0 +1,150 @@
+.TH MC1-FW-ZONE-GUARD 8 "2026-10-28" "mu2edaq-batch-queues" "Mu2e DAQ Tools"
+.SH NAME
+mc1-fw-zone-guard \- keep the MC1 Slurm firewalld zone file in place
+.SH SYNOPSIS
+.B mc1-fw-zone-guard
+.RB [ \-z
+.IR zone ]
+.RB [ \-s
+.IR store ]
+.RB [ \-d
+.IR zonedir ]
+.RB [ \-n ]
+.RB [ \-q ]
+.RB [ sync | check | save | restore ]
+.SH DESCRIPTION
+Slurm traffic between MC1 cluster members is accepted by the firewalld zone
+.B 10_mc1_cluster
+(design decision D16). If its file
+.I /etc/firewalld/zones/10_mc1_cluster.xml
+disappears, cluster traffic falls into the site zone
+.B 50_FNAL
+(target REJECT). slurmd can then no longer reach slurmctld, and every
+compute node goes
+.BR down* .
+This happened on all nodes during site maintenance on 2026-10-16.
+.PP
+.B mc1-fw-zone-guard
+keeps a copy of the live zone file in a store outside
+.I /etc/firewalld
+and puts the file back when it is missing (D24). The copy is always taken from
+the live file, so it follows changes that Ansible roles make to the zone.
+.PP
+The firewall role installs it as
+.I /usr/local/sbin/mc1-fw-zone-guard
+with the units
+.B mc1-fw-zone-guard.service
+(oneshot; runs when firewalld starts and at boot, ordered before slurmd and
+slurmctld) and
+.B mc1-fw-zone-guard.timer
+(every
+.BR mc1_fw_guard_interval ,
+default 5 min).
+.SH MODES
+.TP
+.B sync
+Default. If the live file is present, refresh the saved copy when it differs,
+and reload firewalld if the running firewall lacks the zone. If the live file
+is missing, install the saved copy, run
+.BR restorecon (8)
+on it, then
+.BR "firewall-cmd \-\-reload" .
+.TP
+.B check
+Report only. Exits 0 when the live file is present, the saved copy matches it,
+and the running firewall has the zone; otherwise exits 1 and names what is
+wrong.
+.B mc1-slurm-deploy validate
+records this as
+.BR fw_zone_guard .
+.TP
+.B save
+Copy the live file to the store.
+.TP
+.B restore
+Install the saved copy and reload, even if a live file exists.
+.SH OPTIONS
+Options override the environment, which overrides
+.IR /etc/sysconfig/mc1-fw-zone-guard ,
+which overrides the defaults.
+.TP
+.BI \-z " zone"
+Zone name. Env
+.BR MC1_FW_ZONE ;
+default
+.BR 10_mc1_cluster .
+.TP
+.BI \-s " store"
+Directory for the saved copy (created 0700). Env
+.BR MC1_FW_GUARD_STORE ;
+default
+.IR /var/lib/mc1-slurm/firewalld .
+.TP
+.BI \-d " zonedir"
+firewalld permanent zone directory. Env
+.BR MC1_FW_ZONE_DIR ;
+default
+.IR /etc/firewalld/zones .
+.TP
+.B \-n
+Dry run: print what would change and change nothing.
+.TP
+.B \-q
+Print only changes and problems.
+.TP
+.B \-h
+Usage.
+.SH EXIT STATUS
+.TP
+0
+Nothing to do, or the action succeeded.
+.TP
+1
+.BR check :
+something is missing or stale. Other modes: a copy, install or reload failed.
+.TP
+2
+The live file is missing and there is no saved copy. Re-run the firewall role.
+.TP
+64
+Usage error.
+.SH FILES
+.TP
+.I /var/lib/mc1-slurm/firewalld/10_mc1_cluster.xml
+Saved copy.
+.TP
+.I /etc/sysconfig/mc1-fw-zone-guard
+Settings read by the systemd unit.
+.TP
+.I /etc/systemd/system/mc1-fw-zone-guard.{service,timer}
+Units.
+.SH EXAMPLES
+State of one node:
+.PP
+.EX
+mc1-fw-zone-guard check
+journalctl -t mc1-fw-zone-guard
+systemctl list-timers mc1-fw-zone-guard.timer
+.EE
+.PP
+State of every node from the operator machine:
+.PP
+.EX
+ansible slurm_cluster -i config/inventory.yml -a 'mc1-fw-zone-guard check' < /dev/null > fw-check.txt
+.EE
+.PP
+Preview a restore without changing anything:
+.PP
+.EX
+mc1-fw-zone-guard \-n sync
+.EE
+.SH NOTES
+The guard repairs a deletion; it cannot prevent one. A restore that happens
+while the node is up leaves a gap of up to one timer period. If slurmd was
+started during such a gap, its configless start may time out; restart it with
+.BR "systemctl restart slurmd" .
+.SH SEE ALSO
+.BR mc1-slurm-deploy (1),
+.BR firewall-cmd (1),
+.BR firewalld.zone (5),
+.BR systemd.timer (5)

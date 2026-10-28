@@ -1,0 +1,11 @@
+# {{ ansible_managed | default('Managed by mu2edaq-batch-queues') }}
+[Unit]
+Description=Periodic check of firewalld zone {{ mc1_fw_zone }} (MC1 Slurm)
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec={{ mc1_fw_guard_interval }}
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

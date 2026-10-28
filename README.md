@@ -43,7 +43,7 @@ roles/    preflight storage accounts munge slurm_common firewall slurmdbd slurmc
 scripts/  mc1-slurm-deploy           wrapper: CLI > env > .env > config overrides
           mc1-slurm-presurvey        read-only host survey over ssh
           mc1-cvmfs-fetch-rpms       CVMFS client RPMs, sha256-verified, for the cvmfs role
-man/      man1/                      man pages for every script
+man/      man1/ man8/                man pages for every script; man8: mc1-fw-zone-guard (node side)
 docs/     GETTING-STARTED.md/.pdf     user guide (also web/index.html)
           DESIGN.md INSTALL.md USAGE.md   design; install/operations; job reference
 web/      index.html                 deployable getting-started page

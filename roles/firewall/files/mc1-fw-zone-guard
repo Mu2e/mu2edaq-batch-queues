@@ -1,0 +1,123 @@
+#!/bin/bash
+# mc1-fw-zone-guard: keep the MC1 Slurm firewalld zone file in place.
+#
+# Site maintenance (SLAM Puppet before a reboot) has deleted the project's
+# zone file /etc/firewalld/zones/<zone>.xml, which drops cluster traffic into
+# 50_FNAL (REJECT) and takes every node out of Slurm. This tool keeps a copy
+# of the live file outside /etc/firewalld and puts it back when it is gone.
+#
+#   sync     (default) live file present: refresh the saved copy; live file
+#            missing: restore it from the saved copy and reload firewalld.
+#            Also reloads when the file exists but the running firewall
+#            lacks the zone.
+#   check    report only; exit 0 if the live file, the saved copy and the
+#            running zone are all present and the copy is current, else 1.
+#   save     copy the live file to the store.
+#   restore  install the saved copy and reload, even if a live file exists.
+#
+# Settings: options > environment (MC1_FW_ZONE, MC1_FW_GUARD_STORE,
+# MC1_FW_ZONE_DIR) > /etc/sysconfig/mc1-fw-zone-guard (systemd
+# EnvironmentFile) > defaults. Messages go to stdout and syslog (tag
+# mc1-fw-zone-guard). See mc1-fw-zone-guard(8).
+
+set -u
+
+ZONE=${MC1_FW_ZONE:-10_mc1_cluster}
+STORE=${MC1_FW_GUARD_STORE:-/var/lib/mc1-slurm/firewalld}
+ZONE_DIR=${MC1_FW_ZONE_DIR:-/etc/firewalld/zones}
+DRY_RUN=0
+QUIET=0
+
+usage() {
+    cat <<EOF
+usage: mc1-fw-zone-guard [-z zone] [-s store] [-d zonedir] [-n] [-q] [sync|check|save|restore]
+  -z zone     firewalld zone name (default 10_mc1_cluster; env MC1_FW_ZONE)
+  -s store    directory holding the saved copy (default /var/lib/mc1-slurm/firewalld; env MC1_FW_GUARD_STORE)
+  -d zonedir  firewalld permanent zone directory (default /etc/firewalld/zones; env MC1_FW_ZONE_DIR)
+  -n          dry run: say what would change, change nothing
+  -q          only print changes and problems
+EOF
+}
+
+while getopts ":z:s:d:nqh" opt; do
+    case $opt in
+        z) ZONE=$OPTARG ;;
+        s) STORE=$OPTARG ;;
+        d) ZONE_DIR=$OPTARG ;;
+        n) DRY_RUN=1 ;;
+        q) QUIET=1 ;;
+        h) usage; exit 0 ;;
+        *) usage >&2; exit 64 ;;
+    esac
+done
+shift $((OPTIND - 1))
+MODE=${1:-sync}
+case $MODE in sync|check|save|restore) ;; *) usage >&2; exit 64 ;; esac
+
+LIVE=$ZONE_DIR/$ZONE.xml
+SAVED=$STORE/$ZONE.xml
+
+say()  { [ "$QUIET" = 1 ] || echo "$*"; }
+note() { echo "$*"; logger -t mc1-fw-zone-guard -- "$*" 2>/dev/null || true; }
+
+valid() { [ -s "$1" ] && grep -q '<zone' "$1"; }
+
+fw_running() { firewall-cmd --state >/dev/null 2>&1; }
+
+zone_loaded() { firewall-cmd --get-zones 2>/dev/null | tr ' ' '\n' | grep -qx -- "$ZONE"; }
+
+reload() {
+    if [ "$DRY_RUN" = 1 ]; then say "would reload firewalld"; return 0; fi
+    if ! fw_running; then say "firewalld not running; it reads $LIVE when it starts"; return 0; fi
+    firewall-cmd --reload >/dev/null || { note "ERROR: firewall-cmd --reload failed"; return 1; }
+    zone_loaded || { note "ERROR: zone $ZONE not loaded after reload"; return 1; }
+    note "firewalld reloaded; zone $ZONE active"
+}
+
+save() {
+    valid "$LIVE" || { note "ERROR: $LIVE missing or not a zone file; nothing saved"; return 1; }
+    cmp -s "$LIVE" "$SAVED" && { say "saved copy current: $SAVED"; return 0; }
+    if [ "$DRY_RUN" = 1 ]; then say "would save $LIVE -> $SAVED"; return 0; fi
+    mkdir -p "$STORE" && chmod 0700 "$STORE" &&
+        cp -p "$LIVE" "$SAVED.tmp" && mv -f "$SAVED.tmp" "$SAVED" ||
+        { note "ERROR: could not save $LIVE to $SAVED"; return 1; }
+    note "saved $LIVE -> $SAVED"
+}
+
+restore() {
+    valid "$SAVED" || { note "ERROR: $LIVE missing and no saved copy at $SAVED"; return 2; }
+    if [ "$DRY_RUN" = 1 ]; then say "would restore $SAVED -> $LIVE"; reload; return; fi
+    install -m 0644 "$SAVED" "$LIVE.tmp" && mv -f "$LIVE.tmp" "$LIVE" ||
+        { note "ERROR: could not install $LIVE"; return 1; }
+    command -v restorecon >/dev/null 2>&1 && restorecon "$LIVE" 2>/dev/null
+    note "restored $LIVE from $SAVED"
+    reload
+}
+
+check() {
+    local rc=0
+    if valid "$LIVE"; then say "live zone file: present ($LIVE)"; else echo "live zone file: MISSING ($LIVE)"; rc=1; fi
+    if ! valid "$SAVED"; then echo "saved copy: MISSING ($SAVED)"; rc=1
+    elif valid "$LIVE" && ! cmp -s "$LIVE" "$SAVED"; then echo "saved copy: STALE ($SAVED)"; rc=1
+    else say "saved copy: current ($SAVED)"; fi
+    if ! fw_running; then echo "running zone: firewalld NOT running"; rc=1
+    elif zone_loaded; then say "running zone: $ZONE loaded"
+    else echo "running zone: $ZONE NOT loaded"; rc=1; fi
+    return $rc
+}
+
+case $MODE in
+    check)   check ;;
+    save)    save ;;
+    restore) restore ;;
+    sync)
+        if valid "$LIVE"; then
+            save || exit $?
+            if fw_running && ! zone_loaded; then
+                note "zone $ZONE has a file but is not loaded"
+                reload
+            fi
+        else
+            restore
+        fi ;;
+esac

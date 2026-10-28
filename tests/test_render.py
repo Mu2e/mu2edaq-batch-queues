@@ -91,6 +91,7 @@ def test_validate_results(rendered):
     assert c["node_idle"] == {"mu2e-mc1-worker-02": True, "mu2e-mc1-worker-03": False}
     assert c["munge_roundtrip"] == {"mu2e-mc1-worker-02": True, "mu2e-mc1-worker-03": False}
     assert c["srun_hostname"] == {"mu2e-mc1-worker-02": True, "mu2e-mc1-worker-03": False}
+    assert c["fw_zone_guard"] == {"mu2e-mc1-worker-01": True, "mu2e-mc1-worker-02": False}
     assert c["sbatch"] == {"mu2e-mc1-worker-02": True, "mu2e-mc1-worker-03": False}
     # rc 0 means the 64M job was NOT killed: the limit is not enforced.
     assert c["memory_limit_enforced"] == {"mu2e-mc1-worker-02": True, "mu2e-mc1-worker-03": False}
@@ -153,3 +154,14 @@ def test_cvmfs_default_local_explicit_proxy(rendered):
     assert kv["CVMFS_HTTP_PROXY"] == '"http://squid-a:3128|http://squid-b:3128;DIRECT"'
     assert "CVMFS_CLIENT_PROFILE" not in kv
     assert kv["CVMFS_CONFIG_REPOSITORY"] == "config-osg.opensciencegrid.org"
+
+
+def test_fw_zone_guard_units(rendered):
+    svc = (rendered / "mc1-fw-zone-guard.service").read_text()
+    assert "After=firewalld.service" in svc
+    assert "Before=slurmd.service slurmctld.service" in svc
+    assert "WantedBy=firewalld.service multi-user.target" in svc
+    assert "ExecStart=/usr/local/sbin/mc1-fw-zone-guard -q sync" in svc
+    assert "OnUnitActiveSec=5min" in (rendered / "mc1-fw-zone-guard.timer").read_text()
+    env = dict(l.split("=", 1) for l in conf_lines(rendered / "mc1-fw-zone-guard.sysconfig"))
+    assert env == {"MC1_FW_ZONE": "10_mc1_cluster", "MC1_FW_GUARD_STORE": "/var/lib/mc1-slurm/firewalld"}

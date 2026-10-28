@@ -22,6 +22,10 @@
     v_ping: {rc: 0, stdout: "Slurmctld(primary) at mu2e-mc1-worker-01 is UP"}
     v_sinfo: {stdout_lines: ["mu2e-mc1-worker-02 idle", "mu2e-mc1-worker-03 down*"]}
     v_unmunge: {results: [{rc: 0}, {rc: 1}]}
+    v_fwguard:
+      results:
+        - {item: mu2e-mc1-worker-01.fnal.gov, rc: 0}
+        - {item: mu2e-mc1-worker-02.fnal.gov, rc: 1}
     v_srun:
       results:
         - {item: mu2e-mc1-worker-02, rc: 0, stdout: "mu2e-mc1-worker-02"}
@@ -72,6 +76,9 @@
         - {src: accounts/templates/k5login.j2, dest: k5login}
         - {src: nfs/templates/mc1.exports.j2, dest: mc1.exports}
         - {src: cvmfs/templates/default.local.j2, dest: cvmfs-default.local}
+        - {src: firewall/templates/mc1-fw-zone-guard.service.j2, dest: mc1-fw-zone-guard.service}
+        - {src: firewall/templates/mc1-fw-zone-guard.timer.j2, dest: mc1-fw-zone-guard.timer}
+        - {src: firewall/templates/mc1-fw-zone-guard.sysconfig.j2, dest: mc1-fw-zone-guard.sysconfig}
 
     - name: Render default.local with an explicit proxy and a config repository
       ansible.builtin.template:

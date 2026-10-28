@@ -66,6 +66,24 @@ scripts/mc1-slurm-deploy validate          # writes results/validate-<UTC>.json
 3. Run `scripts/mc1-slurm-deploy deploy`, review the diff, then rerun with
    `--apply`.
 
+### Compute nodes all `down*` / "Not responding"
+
+Check the cluster zone first. Site maintenance has deleted
+`/etc/firewalld/zones/10_mc1_cluster.xml` before (2026-10-16). Without the
+file, traffic from the compute nodes to 6817 is rejected (`No route to host`).
+The firewall role installs `mc1-fw-zone-guard` (D24), which puts the file back
+at boot, when firewalld starts, and every 5 min. To check or repair by hand:
+
+```sh
+ansible slurm_cluster -i config/inventory.yml -a 'mc1-fw-zone-guard check' < /dev/null > fw-check.txt
+scripts/mc1-slurm-deploy firewall --apply        # recreates the zone if no saved copy exists
+# then, on worker-01:
+scontrol update nodename=mu2e-mc1-worker-[02-18] state=resume
+```
+
+A slurmd that started while the zone was missing may be `failed (timeout)`;
+`systemctl restart slurmd` on that node. See `man man/man8/mc1-fw-zone-guard.8`.
+
 ## Local volumes (/scratch, /data-local)
 
 `mc1_local_volumes` in `config/group_vars/all.yml` defines LVs carved from

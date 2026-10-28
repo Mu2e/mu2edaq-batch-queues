@@ -12,6 +12,7 @@
     "node_state": { {% for n in v_nodes %}{{ n | to_json }}: {{ node_state(n) | to_json }}{{ ', ' if not loop.last }}{% endfor %} },
     "node_idle": { {% for n in v_nodes %}{{ n | to_json }}: {{ (node_state(n) | regex_search('^(idle|mixed|allocated)') is not none) | to_json }}{{ ', ' if not loop.last }}{% endfor %} },
     "munge_roundtrip": { {% for r in v_unmunge.results %}{{ v_nodes[loop.index0] | to_json }}: {{ (r.rc == 0) | to_json }}{{ ', ' if not loop.last }}{% endfor %} },
+    "fw_zone_guard": {% if v_fwguard.results is defined and not (v_fwguard.skipped | default(false)) %}{ {% for r in v_fwguard.results %}{{ r.item | regex_replace('\\..*$', '') | to_json }}: {{ (r.rc | default(-1) == 0) | to_json }}{{ ', ' if not loop.last }}{% endfor %} }{% else %}"n/a"{% endif %},
     "srun_hostname": { {% for r in v_srun.results %}{{ r.item | to_json }}: {{ (r.rc == 0 and r.stdout | trim == r.item) | to_json }}{{ ', ' if not loop.last }}{% endfor %} },
     "sbatch": { {% for r in v_sbatch.results %}{{ r.item | to_json }}: {{ (r.rc == 0 and r.stdout | trim | regex_search('^[0-9]+') is not none) | to_json }}{{ ', ' if not loop.last }}{% endfor %} },
     "memory_limit_enforced": { {% for r in v_oom.results %}{{ r.item | to_json }}: {{ (r.rc != 0 and (r.stderr | lower | regex_search('oom|out of memory|killed|memoryerror') is not none)) | to_json }}{{ ', ' if not loop.last }}{% endfor %} },

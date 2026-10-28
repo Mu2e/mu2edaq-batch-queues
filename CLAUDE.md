@@ -21,7 +21,7 @@ trigger worker cluster** using Ansible, run from an operator workstation.
 - Every login goes by ProxyJump as **`mu2eshift@g2gateway01.fnal.gov`**, the
   user's rule, then as root on the workers.
 
-Design decisions D1–D23 and their reasons are in `docs/DESIGN.md`. The user guide
+Design decisions D1–D24 and their reasons are in `docs/DESIGN.md`. The user guide
 is `docs/GETTING-STARTED.md` (+ `.pdf`, rebuilt per README) and `web/index.html`;
 keep all three in step.
 
@@ -76,6 +76,11 @@ the user the command to run with the `!` prefix.
   (`no_log`, checksum-gated). The slurmdbd DB password is generated into
   `/etc/slurm/.slurmdbd-db.pw` on worker-01. Neither touches the operator
   machine or the repo.
+- **Zone guard (D24).** The firewall role also installs
+  `/usr/local/sbin/mc1-fw-zone-guard` (source `roles/firewall/files/`) with a
+  oneshot unit and a 5 min timer. It restores `10_mc1_cluster.xml` from
+  `/var/lib/mc1-slurm/firewalld` if site maintenance deletes it, which
+  happened on 2026-10-16.
 - **Check mode on fresh nodes.** Tasks that need files created by packages
   carry `ignore_errors: "{{ ansible_check_mode }}"`, and runtime commands
   such as `sacctmgr` and `wait_for` are skipped in check mode. Keep that
@@ -130,7 +135,7 @@ defects). Those belong in `docs/private/` and the private tracker.
 
 ## Testing
 
-`venv/bin/python -m pytest -q tests`: 41 tests, offline, about 13 s; also run
+`venv/bin/python -m pytest -q tests`: 51 tests, offline, about 13 s; also run
 them under a Python 3.9 / ansible-core 2.15 venv. Live
 validation on the cluster is `scripts/mc1-slurm-deploy validate`. Its JSON keys
 match the tracker's test-matrix rows.

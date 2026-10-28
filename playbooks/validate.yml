@@ -41,6 +41,15 @@
       changed_when: false
       failed_when: false
 
+    - name: Firewall zone file, saved copy and running zone on every node (D24)
+      ansible.builtin.command: /usr/local/sbin/mc1-fw-zone-guard -q check
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['slurm_cluster'] }}"
+      register: v_fwguard
+      changed_when: false
+      failed_when: false
+      when: mc1_manage_firewall | bool and mc1_fw_guard_enabled | bool
+
     - name: srun hostname on each compute node
       ansible.builtin.command: >-
         runuser -u {{ v_user }} -- srun -N1 -w {{ item }} -D /tmp --time=1 hostname -s

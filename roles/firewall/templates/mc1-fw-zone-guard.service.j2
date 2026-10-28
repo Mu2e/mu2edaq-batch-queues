@@ -1,0 +1,16 @@
+# {{ ansible_managed | default('Managed by mu2edaq-batch-queues') }}
+# Restores firewalld zone {{ mc1_fw_zone }} if its file was deleted (D24).
+# Runs whenever firewalld starts, at boot before the Slurm daemons, and from
+# mc1-fw-zone-guard.timer.
+[Unit]
+Description=Keep firewalld zone {{ mc1_fw_zone }} present (MC1 Slurm)
+After=firewalld.service
+Before=slurmd.service slurmctld.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/sysconfig/mc1-fw-zone-guard
+ExecStart=/usr/local/sbin/mc1-fw-zone-guard -q sync
+
+[Install]
+WantedBy=firewalld.service multi-user.target

@@ -53,6 +53,7 @@ flowchart LR
 | D21 | Repositories `mu2e` and `fermilab.opensciencegrid.org`; no config repository (`CVMFS_CONFIG_REPOSITORY=`) | Mu2e setup scripts take products from `fermilab`. Without autofs, a config repository would have to be mounted before the others; the stratum 1 list and keys in `cvmfs-config-default` suffice. |
 | D22 | Proxy: `CVMFS_CLIENT_PROFILE=single` (WLCG WPAD) unless `mc1_cvmfs_http_proxy` is set | WPAD returns the Fermilab squids for on-site addresses, so no squid name is hard-coded. The role checks WPAD and stratum 1 reachability before installing and stops if neither answers. |
 | D23 | Cache at `/var/lib/cvmfs`, quota 20000 MB, checked against free space (+15%) before install | Workers 17–18 have no free space left in `os_vg` for a dedicated LV. The quota and location are per-host overridable. |
+| D24 | `mc1-fw-zone-guard` (firewall role) keeps a copy of the live `10_mc1_cluster.xml` in `/var/lib/mc1-slurm/firewalld` and restores it plus `firewall-cmd --reload` when it is missing: at boot before slurmd/slurmctld, whenever firewalld starts, and every 5 min (timer). `validate` reports `fw_zone_guard` per node | On 2026-10-16 site maintenance before a reboot deleted the zone file (seen on workers 01, 02 and 17; all 17 compute nodes lost the controller; the `.old`/`.bak` copies survived). Cluster traffic fell into `50_FNAL` (REJECT) and all compute nodes stayed `down*` for 12 days. This contradicts the D16 `--noop` evidence. The guard repairs, it does not prevent; asking SCD to carry the zone in SLAM was option (a) and was not chosen. |
 
 ## Mechanisms
 
@@ -77,6 +78,11 @@ flowchart LR
 - **Config changes.** A changed `slurm.conf` or `cgroup.conf` restarts
   slurmctld, because adding nodes needs a restart on older Slurm versions.
   It then runs `scontrol reconfigure`, so each slurmd fetches the new files.
+- **Zone guard.** `mc1-fw-zone-guard sync` saves the live zone file when it
+  is present and differs from the copy, restores it when it is absent, and
+  reloads firewalld when the file is present but the zone is not running.
+  Taking the copy from the live file (rather than rendering it) keeps zone
+  edits made by other roles, such as `nfs`. See `mc1-fw-zone-guard(8)`.
 - **Puppet guard.** If `puppet.service` is running, preflight fails, since
   Puppet could revert local users, firewall rules or services. Setting
   `mc1_puppet_policy=warn` overrides this.
@@ -93,5 +99,8 @@ bindings, CMake build or long-running local service, so the usual
   node that ran the job. A shared filesystem is an open question.
 - `--check` on a fresh node cannot preview tasks that depend on files the
   packages would create. Those are reported as ignored errors.
+- The zone guard cannot stop the zone file from being deleted. Between a
+  deletion and the next reload, up to one timer period passes, and a slurmd
+  that starts in that window times out (configless fetch) and needs a restart.
 - A `--limit` run needs `mc1_cluster_addrs` set, because firewall sources
   come from the facts of all cluster nodes.
