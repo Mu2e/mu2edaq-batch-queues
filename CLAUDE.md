@@ -31,9 +31,10 @@ source is `docs/private/PROJECT-STATUS.html`, which is git-ignored because it
 holds the access posture. Edit it and republish to the same URL at each phase
 change.
 
-The intended GitHub home is `Mu2e/mu2edaq-batch-queues`, public, registered as
-a submodule of `mu2edaq-main`. Check `git remote -v`: creating the repo was
-handed to the user on 2026-10-06.
+GitHub: `git@github.com:Mu2e/mu2edaq-batch-queues.git` (public, created
+2026-10-28), registered as the submodule `mu2edaq-batch-queues` of
+`Mu2e/mu2edaq-main`. Releases are tagged `vMAJOR.MINOR.PATCH`; the first is
+v1.0.0.
 
 ## Setup and Running
 
