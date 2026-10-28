@@ -8,8 +8,13 @@
 #
 # firewalld dispatches source-matched zones in name order, so the zone
 # 10_mc1_cluster, with the cluster members' /32 addresses as sources,
-# claims that traffic before 50_FNAL. It allows ssh plus the Slurm ports,
-# and only from those addresses. Puppet does not manage this zone.
+# claims that traffic before 50_FNAL. Its target is mc1_fw_zone_target
+# (ACCEPT since 2026-10-28, D28): the cluster is a trusted subnet, so all
+# traffic between members passes (Slurm, NFS, ...). The explicit ssh/Slurm
+# entries below stay for a non-ACCEPT target. Puppet does not manage this zone.
+#
+# Because this zone claims member traffic, Puppet's own openings (the
+# firewalld policy FNAL, e.g. nfs_for_FNAL) never apply between members.
 
 - name: Collect service states
   ansible.builtin.service_facts:
@@ -128,6 +133,22 @@
 
 - name: Load the zone guard units
   ansible.builtin.meta: flush_handlers
+
+- name: Zone target {{ mc1_fw_zone_target }} (trusted cluster subnet, D28)
+  ansible.posix.firewalld:
+    zone: "{{ mc1_fw_zone }}"
+    target: "{{ mc1_fw_zone_target }}"
+    state: present
+    permanent: true
+  register: fw_target
+  when: fw_active | bool
+  ignore_errors: "{{ ansible_check_mode }}"
+
+# A target change is permanent-only; reload to apply it. Established
+# connections (NFS mounts, srun) survive a reload.
+- name: Apply the zone target
+  ansible.builtin.command: firewall-cmd --reload
+  when: (fw_active | bool) and fw_target is changed and not ansible_check_mode
 
 - name: Save the zone now (first copy, or refresh after the changes above)
   ansible.builtin.command: /usr/local/sbin/mc1-fw-zone-guard -z {{ mc1_fw_zone }} -s {{ mc1_fw_guard_store }} sync

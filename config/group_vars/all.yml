@@ -177,6 +177,7 @@ mc1_cvmfs_check_url: http://cvmfs-s1fnal.opensciencegrid.org:8000/cvmfs
 # cluster is opened.
 mc1_manage_firewall: true
 mc1_fw_zone: 10_mc1_cluster    # sorts before Puppet's 50_FNAL
+mc1_fw_zone_target: ACCEPT     # trusted subnet: all traffic between members (D28); "default" = listed services/ports only
 mc1_fw_services: [ssh]         # members' traffic leaves 50_FNAL, so keep ssh
 mc1_cluster_addrs: []          # empty = resolve slurm_cluster hosts on each node
 # Zone guard (D24): restores the zone file if site maintenance deletes it.

@@ -23,6 +23,8 @@ flowchart LR
     end
 ```
 
+All traffic between cluster members is accepted (D28); the table lists what each port is for.
+
 | Port | Listener | Opened to |
 |------|----------|-----------|
 | 6817/tcp | slurmctld (worker-01) | cluster nodes (zone `10_mc1_cluster`) |
@@ -58,6 +60,7 @@ flowchart LR
 | D25 | Periodic health check `mc1-healthcheck` (Python 3.9, system Jinja2/PyYAML) on worker-01, from the crontab of `mu2ebatch` every 30 min; non-disruptive checks only (services, ping, disk, association, node states, one srun on all usable nodes for storage/CVMFS/controller port/zone guard, sbatch + sacct, memory limit, CPU binding, job array) | Runs where the Slurm tools and state are, so it does not depend on the operator machine or the gateway. A job account exercises the user submit path and needs no root. Root's crontab and `/etc/crontab` are SLAM Puppet's. Drain, restart and reboot tests stay manual. Full cluster = warn ("busy"), not fail. |
 | D26 | Status site: static HTML + `status.json`/`history.json` in `/var/www/mc1-status`, served by httpd (`Listen 80` since 2026-10-28, previously `127.0.0.1:80`) to loopback clients and, since 2026-10-28, the cluster members (`Require local` + `Require ip`; `http` in `10_mc1_cluster` on worker-01 only, `mc1_hc_web_cluster_access`). httpd also admits `mc1_hc_web_allow_nets` (131.225.0.0/16), but the firewall still limits port 80 to the cluster members; viewed through an ssh tunnel (`scripts/mc1-status-tunnel`) | The gateway reaches worker-01 only on ssh, and the workstation not at all. Opening 80 would put the gateway into a project zone, which also re-homes its ssh and risks a lockout. Loopback + tunnel needs no firewall change and no auth layer. Static files: no app server to keep alive, and a run that dies leaves the last good page. |
 | D27 | Mail through the site Postfix (`sendmail -t`, relays to smtp.fnal.gov) on state change: turns bad, the failing set changes, every 12 h while bad, and once on recovery; `notify_on: fail` by default | Avoids a mail per run during a long outage. Postfix is Puppet-managed and already relays, so the role does not touch it. A failed send is not recorded and is retried on the next run. |
+| D28 | Zone `10_mc1_cluster` target `ACCEPT` on every node (`mc1_fw_zone_target`): all traffic between cluster members passes | User decision 2026-10-28: the cluster is a trusted subnet. SCD's Puppet added NFS (`/home` from worker-17, `/data` from worker-18) and allows it through the firewalld policy `FNAL` on `50_FNAL`. Our zone claims member traffic first, so that policy never applied and new NFS connections were rejected (worker-18 could not mount `/home` after a reboot). Listing ports per service would break again on the next site change. Sources are still the members' /32s only. |
 
 ## Mechanisms
 

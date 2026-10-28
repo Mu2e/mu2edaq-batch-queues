@@ -14,14 +14,15 @@ trigger worker cluster** using Ansible, run from an operator workstation.
   and installed from `artifacts/rpms/` (git-ignored, present only in the
   worktree `wt/batch-queues-ansible`).
 - Every node has `/scratch` (100G) and `/data-local` (500G) LVs; worker-17
-  has `/nfshome`, worker-18 `/nfsdata`. NFS export is blocked by SLAM Puppet
-  (`nfs::service`), so the `nfs` role is gated off.
+  has `/nfshome`, worker-18 `/nfsdata`. Since the 2026-10-16 maintenance SCD's
+  Puppet exports them and mounts `/home` (from 17) and `/data` (from 18) on all
+  workers; the project's `nfs` role stays off (it would fight Puppet).
 - CVMFS is installed by the site. The `cvmfs` role is off
   (`mc1_cvmfs_enabled: false`) and must not overwrite the site config.
 - Every login goes by ProxyJump as **`mu2eshift@g2gateway01.fnal.gov`**, the
   user's rule, then as root on the workers.
 
-Design decisions D1–D27 and their reasons are in `docs/DESIGN.md`. The user guide
+Design decisions D1–D28 and their reasons are in `docs/DESIGN.md`. The user guide
 is `docs/GETTING-STARTED.md` (+ `.pdf`, rebuilt per README) and `web/index.html`;
 keep all three in step.
 
@@ -79,6 +80,10 @@ the user the command to run with the `!` prefix.
   (`no_log`, checksum-gated). The slurmdbd DB password is generated into
   `/etc/slurm/.slurmdbd-db.pw` on worker-01. Neither touches the operator
   machine or the repo.
+- **Trusted cluster zone (D28).** `10_mc1_cluster` has target ACCEPT: all
+  member-to-member traffic passes (including SCD's NFS `/home` from worker-17
+  and `/data` from worker-18). Member traffic never reaches Puppet's `50_FNAL`
+  or its `FNAL` policy.
 - **Zone guard (D24).** The firewall role also installs
   `/usr/local/sbin/mc1-fw-zone-guard` (source `roles/firewall/files/`) with a
   oneshot unit and a 5 min timer. It restores `10_mc1_cluster.xml` from
