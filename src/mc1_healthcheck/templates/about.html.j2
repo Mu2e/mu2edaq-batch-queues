@@ -5,7 +5,11 @@
 <p><code>mc1-healthcheck</code> checks the Slurm batch system on the Mu2e MC1 trigger worker cluster. It runs from cron on the controller, <code>{{ status.host }}</code>, as <code>{{ status.user }}</code>. Each run writes this site and mails the operators when the state turns bad, changes, stays bad for {{ cfg.mail.reminder_hours }} h, or recovers. The checks only read state or run small jobs named <code>mc1hc-*</code>; they never restart, drain or reboot anything.</p>
 
 <h2>Viewing this page</h2>
+{% if web.cluster_url %}
+<p>From any MC1 cluster node, read it directly: <code>curl {{ web.cluster_url }}status.json</code> or a text browser at <code>{{ web.cluster_url }}</code>. Only the cluster members are admitted (httpd <code>Require ip</code> and the firewall). From anywhere else the site firewall rejects port 80, so use an ssh tunnel over the gateway:</p>
+{% else %}
 <p>The web server serves this site to loopback clients on the controller only (<code>Require local</code>), and the site firewall rejects port 80 from the network. Reach it through an ssh tunnel over the gateway:</p>
+{% endif %}
 <pre>{{ web.access }}</pre>
 
 <h2>Checks</h2>
@@ -33,7 +37,7 @@
     <tr><td>Jinja2</td><td>2.11 (<code>python3-jinja2</code>, AppStream)</td><td>rendering these pages</td></tr>
     <tr><td>PyYAML</td><td>5.4 (<code>python3-pyyaml</code>, AppStream)</td><td>reading <code>{{ cfg.config_path }}</code></td></tr>
     <tr><td>Slurm client tools</td><td>26.05 (<code>scontrol</code>, <code>sinfo</code>, <code>srun</code>, <code>sbatch</code>, <code>sacct</code>, <code>sacctmgr</code>, <code>scancel</code>)</td><td>the checks</td></tr>
-    <tr><td>Apache httpd</td><td>2.4 (<code>httpd</code>, AppStream), port 80, loopback clients only</td><td>serving this directory</td></tr>
+    <tr><td>Apache httpd</td><td>2.4 (<code>httpd</code>, AppStream), port 80: loopback{{ ' and cluster nodes' if web.cluster_url }}</td><td>serving this directory</td></tr>
     <tr><td>Postfix / sendmail</td><td>site-managed, relays to smtp.fnal.gov</td><td>problem and recovery mail</td></tr>
     <tr><td>cronie</td><td>site-managed</td><td>running the checks every 30 min (crontab of {{ status.user }})</td></tr>
   </tbody>

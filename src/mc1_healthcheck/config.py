@@ -39,6 +39,7 @@ DEFAULTS = {
         "history_runs": 336,         # one week at 30 min
         "refresh_seconds": 300,
         "title": "MC1 Slurm health",
+        "cluster_url": "",           # set when cluster nodes may read the site directly
         "access": "ssh -N -L 8081:localhost:80 -J mu2eshift@g2gateway01.fnal.gov "
                   "<user>@mu2e-mc1-worker-01.fnal.gov, then http://localhost:8081/",
     },

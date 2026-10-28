@@ -22,6 +22,7 @@ web:
   history_runs: 336
   refresh_seconds: 300
   title: "MC1 Slurm health"
+  cluster_url: {{ ('http://' ~ (groups['slurm_controller'] | first) ~ '/' if mc1_hc_web_cluster_access | bool else '') | to_json }}
   access: {{ ('scripts/mc1-status-tunnel   (or: ssh -N -L ' ~ mc1_hc_tunnel_port ~ ':127.0.0.1:' ~ (mc1_hc_web_listen | string | regex_replace('^.*:', '')) ~ ' -J ' ~ mc1_jump ~ ' <user>@' ~ (groups['slurm_controller'] | first) ~ '), then http://localhost:' ~ mc1_hc_tunnel_port ~ '/') | to_json }}
 mail:
   enabled: true

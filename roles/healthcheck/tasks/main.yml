@@ -105,6 +105,21 @@
   notify: Restart httpd
   ignore_errors: "{{ ansible_check_mode }}"   # httpd.conf absent before the package
 
+- name: Resolve cluster member addresses for the site's Require ip
+  ansible.builtin.command: getent ahostsv4 {{ item }}
+  loop: "{{ groups['slurm_cluster'] }}"
+  register: hc_resolved
+  changed_when: false
+  check_mode: false
+  when: (mc1_hc_web_cluster_access | bool) and mc1_cluster_addrs | length == 0
+
+- name: Addresses allowed to read the site besides loopback
+  ansible.builtin.set_fact:
+    hc_web_allow: >-
+      {{ [] if not (mc1_hc_web_cluster_access | bool) else
+         (mc1_cluster_addrs if mc1_cluster_addrs | length > 0 else
+          (hc_resolved.results | map(attribute='stdout_lines') | map('first') | map('split') | map('first') | unique | list)) }}
+
 - name: httpd site for the status pages
   ansible.builtin.template:
     src: httpd-mc1-status.conf.j2
@@ -124,6 +139,29 @@
 
 - name: Apply httpd changes
   ansible.builtin.meta: flush_handlers
+
+# Cluster members' traffic to the controller lands in mc1_fw_zone (D16), which
+# opens only ssh and the Slurm ports; http is added on the controller alone.
+- name: Firewall state
+  ansible.builtin.service_facts:
+  when: mc1_manage_firewall | bool
+
+- name: http in {{ mc1_fw_zone }} on the controller (cluster members only)
+  ansible.posix.firewalld:
+    zone: "{{ mc1_fw_zone }}"
+    service: http
+    permanent: true
+    immediate: true
+    state: "{{ 'enabled' if mc1_hc_web_cluster_access | bool else 'disabled' }}"
+  register: hc_fw_http
+  when: >-
+    (mc1_manage_firewall | bool) and
+    (ansible_facts.services['firewalld.service'] | default({})).get('state', 'absent') == 'running'
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: Refresh the zone guard's saved copy (D24) after the zone change
+  ansible.builtin.command: /usr/local/sbin/mc1-fw-zone-guard -q save
+  when: hc_fw_http is changed and (mc1_fw_guard_enabled | bool) and not ansible_check_mode
 
 - name: Cron entry for {{ mc1_hc_user }}
   ansible.builtin.cron:

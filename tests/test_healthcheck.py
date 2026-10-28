@@ -306,6 +306,16 @@ def test_pages_and_json(cfg):
     assert "/status.json" in open(os.path.join(www, "api.html")).read()
 
 
+def test_about_page_cluster_url(cfg):
+    report.write_all(cfg, status_for(cfg, FakeCluster()))
+    about = open(os.path.join(cfg["web"]["dir"], "about.html")).read()
+    assert "loopback clients on the controller only" in about
+    cfg["web"]["cluster_url"] = "http://mu2e-mc1-worker-01.fnal.gov/"
+    report.rerender(cfg)
+    about = open(os.path.join(cfg["web"]["dir"], "about.html")).read()
+    assert "curl http://mu2e-mc1-worker-01.fnal.gov/status.json" in about
+
+
 def test_html_is_escaped(cfg):
     fake = FakeCluster()
     fake.states[NODES[0]] = "down*"

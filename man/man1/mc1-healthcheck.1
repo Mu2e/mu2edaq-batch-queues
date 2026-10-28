@@ -238,7 +238,9 @@ The site: index.html, history.html, api.html, about.html, sitemap.html,
 status.json, history.json.
 .TP
 .I /etc/httpd/conf.d/mc1-status.conf
-httpd site: loopback clients only (Require local); httpd listens on port 80.
+httpd site: loopback clients, plus the cluster members' addresses (Require ip) when
+.B mc1_hc_web_cluster_access
+is true; the firewall opens port 80 to the same members only.
 .SH EXAMPLES
 On the controller, as mu2ebatch:
 .PP
@@ -250,6 +252,12 @@ mc1-healthcheck mail-test                     # check the mail path
 mc1-healthcheck --set mail.notify_on=warn run # mail on warnings this once
 crontab -l                                    # the cron entry
 tail /var/lib/mc1-healthcheck/cron.log
+.EE
+.PP
+From any cluster node:
+.PP
+.EX
+curl -s http://mu2e-mc1-worker-01.fnal.gov/status.json | python3 -m json.tool | head
 .EE
 .PP
 From the operator machine:

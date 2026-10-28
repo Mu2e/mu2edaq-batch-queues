@@ -88,7 +88,8 @@ the user the command to run with the `!` prefix.
   PyYAML 5.4, the EL9 system packages; keep templates 2.11-compatible) is
   deployed by `roles/healthcheck` to `/opt/mc1-healthcheck` on worker-01. It
   runs from mu2ebatch's crontab, writes `/var/www/mc1-status` (httpd on
-  Listen 80, `Require local`), and mails via the site Postfix on state change. View it
+  Listen 80; loopback + cluster members via `Require ip` and `http` in
+  `10_mc1_cluster` on 01), and mails via the site Postfix on state change. View it
   with `scripts/mc1-status-tunnel`. `tests/test_healthcheck.py` drives it
   against a fake Slurm.
 - **Check mode on fresh nodes.** Tasks that need files created by packages

@@ -181,6 +181,7 @@ def test_healthcheck_config(rendered):
     assert cfg["mail"]["to"] == ["anorman@fnal.gov"]
     assert cfg["mail"]["from"] == "mu2ebatch@mu2e-mc1-worker-01.fnal.gov"
     assert "-L 8081:127.0.0.1:80 -J mu2eshift@g2gateway01.fnal.gov" in cfg["web"]["access"]
+    assert cfg["web"]["cluster_url"] == "http://mu2e-mc1-worker-01.fnal.gov/"
     assert set(yaml.safe_load(path.read_text())) <= set(config.DEFAULTS)
 
 
@@ -188,6 +189,7 @@ def test_healthcheck_httpd_and_wrapper(rendered):
     conf = (rendered / "httpd-mc1-status.conf").read_text()
     assert 'DocumentRoot "/var/www/mc1-status"' in conf and "Require local" in conf
     assert "httpd listens on 80 " in conf
+    assert "    Require ip 131.225.246.21 131.225.246.22\n" in conf
     assert "Options -Indexes" in conf
     wrapper = (rendered / "mc1-healthcheck").read_text()
     assert wrapper.startswith("#!/usr/bin/python3") and 'sys.path.insert(0, "/opt/mc1-healthcheck/lib")' in wrapper
