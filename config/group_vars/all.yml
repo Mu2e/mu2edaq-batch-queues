@@ -36,8 +36,7 @@ mc1_service_accounts:
     comment: Slurm workload manager
 
 # Job accounts. Existing accounts are not created; their home ownership is
-# repaired when fix_home_ownership is true (worker homes were root:root 750
-# on 2026-10-02). New accounts need a uid chosen outside every range the
+# set to the account when fix_home_ownership is true. New accounts need a uid chosen outside every range the
 # nodes could later receive from SSSD/LDAP; preflight refuses a null uid.
 mc1_job_accounts:
   - name: mu2ebatch
