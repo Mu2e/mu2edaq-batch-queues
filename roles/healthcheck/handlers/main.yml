@@ -1,0 +1,6 @@
+---
+- name: Restart httpd
+  ansible.builtin.systemd:
+    name: httpd
+    state: restarted
+  ignore_errors: "{{ ansible_check_mode }}"

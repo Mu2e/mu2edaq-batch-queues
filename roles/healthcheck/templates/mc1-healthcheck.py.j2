@@ -1,0 +1,9 @@
+#!/usr/bin/python3
+# {{ ansible_managed }}
+# mc1-healthcheck: see mc1-healthcheck(1). Package in {{ mc1_hc_prefix }}/lib.
+import sys
+
+sys.path.insert(0, "{{ mc1_hc_prefix }}/lib")
+from mc1_healthcheck.cli import main  # noqa: E402
+
+sys.exit(main())

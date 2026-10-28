@@ -1,0 +1,87 @@
+.TH MC1-STATUS-TUNNEL 1 "2026-10-28" "mu2edaq-batch-queues" "Mu2e DAQ Tools"
+.SH NAME
+mc1-status-tunnel \- ssh tunnel to the MC1 Slurm health status site
+.SH SYNOPSIS
+.B mc1-status-tunnel
+.RB [ \-j
+.IR user@gateway ]
+.RB [ \-u
+.IR login ]
+.RB [ \-p
+.IR localport ]
+.RB [ \-H
+.IR host ]
+.RB [ \-r
+.IR addr:port ]
+.RB [ \-o ]
+.RB [ \-c ]
+.RB [ \-n ]
+.SH DESCRIPTION
+The status pages written by
+.BR mc1-healthcheck (1)
+are served by httpd on the loopback interface of
+.B mu2e-mc1-worker-01
+only (design decision D26), so no firewall port is open. This script forwards
+a local port to that address through the G2 gateway, using Kerberos (GSSAPI)
+for both hops:
+.PP
+.EX
+ssh -N -L 8081:127.0.0.1:80 -J mu2eshift@g2gateway01.fnal.gov mu2eshift@mu2e-mc1-worker-01.fnal.gov
+.EE
+.PP
+Then browse
+.IR http://localhost:8081/ .
+Any account that can log in to worker-01 works for
+.BR \-u .
+.SH OPTIONS
+Options override the environment, which overrides the defaults.
+.TP
+.BI \-j " user@gateway"
+ProxyJump hop. Env
+.BR MC1_JUMP ;
+default
+.BR mu2eshift@g2gateway01.fnal.gov .
+.TP
+.BI \-u " login"
+Login on the controller. Env
+.BR MC1_HC_TUNNEL_USER ;
+default
+.BR mu2eshift .
+.TP
+.BI \-p " localport"
+Local port. Env
+.BR MC1_HC_TUNNEL_PORT ;
+default 8081.
+.TP
+.BI \-H " host"
+Controller. Env
+.BR MC1_HC_HOST ;
+default
+.BR mu2e-mc1-worker-01.fnal.gov .
+.TP
+.BI \-r " addr:port"
+Site address on the controller. Env
+.BR MC1_HC_REMOTE ;
+default 127.0.0.1:80.
+.TP
+.B \-o
+Open the browser
+.RB ( open ,
+.BR xdg-open " or " wslview )
+when the site answers; the tunnel stays up until Ctrl-C.
+.TP
+.B \-c
+Check only: open the tunnel, print the overall status and the checks that are
+not ok, close the tunnel. Exit 0 ok, 1 warn, 2 fail or unreachable.
+.TP
+.B \-n
+Print the ssh command and exit.
+.SH EXAMPLES
+.EX
+scripts/mc1-status-tunnel -o
+scripts/mc1-status-tunnel -c            # quick look from a terminal
+scripts/mc1-status-tunnel -p 9000 -u mu2edaq
+.EE
+.SH SEE ALSO
+.BR mc1-healthcheck (1),
+.BR ssh (1)

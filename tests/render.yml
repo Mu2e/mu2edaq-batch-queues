@@ -11,6 +11,7 @@
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
     roles_dir: "{{ playbook_dir }}/../roles"
     slurmdbd_db_password: test-password
+    mc1_hc_group: mu2e
     slurm_future_nodelist: "mu2e-mc1-worker-[04-16]"   # exercise the FUTURE path
     slurm_compute_nodes:
       - {name: mu2e-mc1-worker-02, addr: mu2e-mc1-worker-02.fnal.gov, sockets: 2, cores_per_socket: 16, threads_per_core: 2, real_memory: 254000}
@@ -79,6 +80,10 @@
         - {src: firewall/templates/mc1-fw-zone-guard.service.j2, dest: mc1-fw-zone-guard.service}
         - {src: firewall/templates/mc1-fw-zone-guard.timer.j2, dest: mc1-fw-zone-guard.timer}
         - {src: firewall/templates/mc1-fw-zone-guard.sysconfig.j2, dest: mc1-fw-zone-guard.sysconfig}
+        - {src: healthcheck/templates/config.yaml.j2, dest: mc1-healthcheck.yaml}
+        - {src: healthcheck/templates/httpd-mc1-status.conf.j2, dest: httpd-mc1-status.conf}
+        - {src: healthcheck/templates/mc1-healthcheck.py.j2, dest: mc1-healthcheck}
+        - {src: healthcheck/templates/logrotate-mc1-healthcheck.j2, dest: logrotate-mc1-healthcheck}
 
     - name: Render default.local with an explicit proxy and a config repository
       ansible.builtin.template:

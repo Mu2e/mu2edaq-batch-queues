@@ -1,0 +1,45 @@
+{% extends "base.html.j2" %}
+{% block title %}About · {{ web.title }}{% endblock %}
+{% block body %}
+<h1>About</h1>
+<p><code>mc1-healthcheck</code> checks the Slurm batch system on the Mu2e MC1 trigger worker cluster. It runs from cron on the controller, <code>{{ status.host }}</code>, as <code>{{ status.user }}</code>. Each run writes this site and mails the operators when the state turns bad, changes, stays bad for {{ cfg.mail.reminder_hours }} h, or recovers. The checks only read state or run small jobs named <code>mc1hc-*</code>; they never restart, drain or reboot anything.</p>
+
+<h2>Viewing this page</h2>
+<p>The web server listens on the controller's loopback interface only, so no firewall port is opened. Reach it through an ssh tunnel over the gateway:</p>
+<pre>{{ web.access }}</pre>
+
+<h2>Checks</h2>
+<div class="scroll"><table>
+  <thead><tr><th>Check</th><th>What it verifies</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">controller_services</td><td>slurmctld, slurmdbd, mariadb, munge and the zone-guard timer are active; the guard's last run succeeded</td></tr>
+    <tr><td class="mono">controller_ping</td><td><code>scontrol ping</code> reports slurmctld UP</td></tr>
+    <tr><td class="mono">controller_disk</td><td>free space on {{ cfg.controller_paths|join(", ") }}</td></tr>
+    <tr><td class="mono">accounting</td><td>slurmdbd answers and the job account has an association (otherwise its jobs are rejected)</td></tr>
+    <tr><td class="mono">node_states</td><td>every expected node is idle, mixed or allocated; drained = warn; down or not responding = fail</td></tr>
+    <tr><td class="mono">node_srun / storage / cvmfs / ctld_port / zone_guard</td><td>one srun on every usable node: {{ cfg.node_paths|join(", ") }} writable with enough space, {{ cfg.cvmfs_repositories|join(", ") }} readable, slurmctld port {{ cfg.controller_port }} reachable, firewall zone guard timer active</td></tr>
+    <tr><td class="mono">sbatch_roundtrip</td><td>a batch job runs to completion and its accounting record is COMPLETED</td></tr>
+    <tr><td class="mono">memory_limit</td><td>a 64 MB job that allocates 512 MB is killed by the cgroup limit</td></tr>
+    <tr><td class="mono">cpu_binding</td><td><code>srun -c2 nproc</code> prints 2</td></tr>
+    <tr><td class="mono">job_array</td><td>a 4-task array completes</td></tr>
+  </tbody>
+</table></div>
+
+<h2>Dependencies</h2>
+<div class="scroll"><table>
+  <thead><tr><th>Component</th><th>Version / source</th><th>Used for</th></tr></thead>
+  <tbody>
+    <tr><td>Python</td><td>3.9 (AlmaLinux 9 system <code>python3</code>)</td><td>the checker; standard library only plus the two below</td></tr>
+    <tr><td>Jinja2</td><td>2.11 (<code>python3-jinja2</code>, AppStream)</td><td>rendering these pages</td></tr>
+    <tr><td>PyYAML</td><td>5.4 (<code>python3-pyyaml</code>, AppStream)</td><td>reading <code>{{ cfg.config_path }}</code></td></tr>
+    <tr><td>Slurm client tools</td><td>26.05 (<code>scontrol</code>, <code>sinfo</code>, <code>srun</code>, <code>sbatch</code>, <code>sacct</code>, <code>sacctmgr</code>, <code>scancel</code>)</td><td>the checks</td></tr>
+    <tr><td>Apache httpd</td><td>2.4 (<code>httpd</code>, AppStream), loopback only</td><td>serving this directory</td></tr>
+    <tr><td>Postfix / sendmail</td><td>site-managed, relays to smtp.fnal.gov</td><td>problem and recovery mail</td></tr>
+    <tr><td>cronie</td><td>site-managed</td><td>running the checks every 30 min (crontab of {{ status.user }})</td></tr>
+  </tbody>
+</table></div>
+<p class="muted" style="margin-top:8px">No JavaScript and no external stylesheets: the pages are static HTML generated on each run.</p>
+
+<h2>Configuration</h2>
+<p>File <code>{{ cfg.config_path }}</code>, deployed by the Ansible role <code>healthcheck</code> from <code>config/group_vars/all.yml</code>. Precedence: command line (<code>--set key=value</code>) &gt; environment (<code>MC1_HC_*</code>) &gt; <code>.env</code> &gt; config file &gt; defaults. See <code>man mc1-healthcheck</code>.</p>
+{% endblock %}

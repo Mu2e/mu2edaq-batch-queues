@@ -1,0 +1,46 @@
+{% extends "base.html.j2" %}
+{% block title %}API · {{ web.title }}{% endblock %}
+{% block body %}
+<h1>API</h1>
+<p>The site is static: every route is a file rewritten by each run (atomic rename, so a reader never sees a partial file). There are no query parameters, no POST and no authentication; access is limited by the loopback-only listener.</p>
+
+<h2>Routes</h2>
+<div class="scroll"><table>
+  <thead><tr><th>Method</th><th>Path</th><th>Type</th><th>Content</th></tr></thead>
+  <tbody>
+    <tr><td>GET</td><td class="mono"><a href="status.json">/status.json</a></td><td>application/json</td><td>the latest run, full detail</td></tr>
+    <tr><td>GET</td><td class="mono"><a href="history.json">/history.json</a></td><td>application/json</td><td>the last {{ web.history_runs }} runs, per-check status only</td></tr>
+    <tr><td>GET</td><td class="mono"><a href="index.html">/</a>, /index.html</td><td>text/html</td><td>status page (auto-refresh {{ web.refresh_seconds }} s)</td></tr>
+    <tr><td>GET</td><td class="mono"><a href="history.html">/history.html</a></td><td>text/html</td><td>run × check table</td></tr>
+    <tr><td>GET</td><td class="mono"><a href="api.html">/api.html</a></td><td>text/html</td><td>this page</td></tr>
+    <tr><td>GET</td><td class="mono"><a href="about.html">/about.html</a></td><td>text/html</td><td>checks, dependencies, configuration</td></tr>
+    <tr><td>GET</td><td class="mono"><a href="sitemap.html">/sitemap.html</a></td><td>text/html</td><td>site structure</td></tr>
+  </tbody>
+</table></div>
+
+<h2><code>status.json</code> (schema {{ status.schema }})</h2>
+<div class="scroll"><table>
+  <thead><tr><th>Field</th><th>Type</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">schema</td><td>int</td><td>format version; bumped on incompatible change</td></tr>
+    <tr><td class="mono">version</td><td>string</td><td>mc1-healthcheck version</td></tr>
+    <tr><td class="mono">generated, generated_epoch</td><td>string, int</td><td>run end, ISO 8601 local time and Unix seconds</td></tr>
+    <tr><td class="mono">host, user</td><td>string</td><td>where and as whom the run executed</td></tr>
+    <tr><td class="mono">overall</td><td>"ok" | "warn" | "fail"</td><td>worst check status (skip counts as ok)</td></tr>
+    <tr><td class="mono">duration_s</td><td>number</td><td>run time</td></tr>
+    <tr><td class="mono">counts</td><td>object</td><td>number of checks per status</td></tr>
+    <tr><td class="mono">checks[]</td><td>array</td><td><code>name</code>, <code>title</code>, <code>status</code> (ok/warn/fail/skip), <code>summary</code>, <code>details[]</code>, <code>nodes</code> {node: status}, <code>duration</code></td></tr>
+    <tr><td class="mono">nodes</td><td>object</td><td>{node: {check: status}}, the per-node matrix</td></tr>
+  </tbody>
+</table></div>
+
+<h2><code>history.json</code></h2>
+<p>An array, oldest first, of <code>{generated, generated_epoch, overall, duration_s, checks: {name: status}}</code>.</p>
+
+<h2>Examples</h2>
+<pre>curl -s http://localhost:8081/status.json | python3 -c 'import json,sys; s=json.load(sys.stdin); print(s["overall"])'
+curl -s http://localhost:8081/status.json | jq -r '.checks[] | select(.status!="ok") | "\(.name): \(.summary)"'
+# on the controller, without the web server:
+mc1-healthcheck run --json --no-mail --no-web | jq .overall</pre>
+<p class="muted">Exit status of <code>mc1-healthcheck run</code>: 0 ok, 1 warn, 2 fail, 3 results or mail could not be written/sent, 4 another run is in progress, 64 usage error.</p>
+{% endblock %}

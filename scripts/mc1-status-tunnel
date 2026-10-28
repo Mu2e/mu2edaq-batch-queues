@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+# mc1-status-tunnel: open an ssh tunnel to the mc1-healthcheck status site on
+# the controller and (optionally) open it in a browser. The site listens on the
+# controller's loopback interface only (D26), so a tunnel is the way in.
+#
+# Settings: options > environment (MC1_JUMP, MC1_HC_TUNNEL_USER,
+# MC1_HC_TUNNEL_PORT, MC1_HC_HOST, MC1_HC_REMOTE) > defaults. See
+# mc1-status-tunnel(1).
+
+set -u
+
+JUMP=${MC1_JUMP:-mu2eshift@g2gateway01.fnal.gov}
+LOGIN=${MC1_HC_TUNNEL_USER:-mu2eshift}
+PORT=${MC1_HC_TUNNEL_PORT:-8081}
+HOST=${MC1_HC_HOST:-mu2e-mc1-worker-01.fnal.gov}
+REMOTE=${MC1_HC_REMOTE:-127.0.0.1:80}
+OPEN=0
+PRINT=0
+CHECK=0
+
+usage() {
+    cat <<EOF
+usage: mc1-status-tunnel [-j user@gateway] [-u login] [-p localport] [-H host] [-r addr:port] [-o] [-c] [-n]
+  -j  ProxyJump hop          (default $JUMP; env MC1_JUMP)
+  -u  login on the controller (default $LOGIN; env MC1_HC_TUNNEL_USER)
+  -p  local port             (default $PORT; env MC1_HC_TUNNEL_PORT)
+  -H  controller             (default $HOST; env MC1_HC_HOST)
+  -r  site address there     (default $REMOTE; env MC1_HC_REMOTE)
+  -o  open the browser once the tunnel is up
+  -c  check only: open the tunnel, print overall status from status.json, close
+  -n  print the ssh command and exit
+EOF
+}
+
+while getopts ":j:u:p:H:r:ocnh" opt; do
+    case $opt in
+        j) JUMP=$OPTARG ;;
+        u) LOGIN=$OPTARG ;;
+        p) PORT=$OPTARG ;;
+        H) HOST=$OPTARG ;;
+        r) REMOTE=$OPTARG ;;
+        o) OPEN=1 ;;
+        c) CHECK=1 ;;
+        n) PRINT=1 ;;
+        h) usage; exit 0 ;;
+        *) usage >&2; exit 64 ;;
+    esac
+done
+
+URL="http://localhost:$PORT/"
+CMD=(ssh -N -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o GSSAPIAuthentication=yes
+     -L "$PORT:$REMOTE" -J "$JUMP" "$LOGIN@$HOST")
+
+if [ "$PRINT" = 1 ]; then
+    printf '%q ' "${CMD[@]}"; echo
+    echo "then open $URL"
+    exit 0
+fi
+
+wait_up() {
+    for _ in $(seq 1 30); do
+        curl -fsS -o /dev/null "${URL}status.json" 2>/dev/null && return 0
+        kill -0 "$1" 2>/dev/null || return 1
+        sleep 1
+    done
+    return 1
+}
+
+if [ "$CHECK" = 1 ]; then
+    "${CMD[@]}" & pid=$!
+    trap 'kill $pid 2>/dev/null' EXIT
+    wait_up "$pid" || { echo "mc1-status-tunnel: tunnel or site not reachable" >&2; exit 2; }
+    curl -fsS "${URL}status.json" | python3 -c '
+import json, sys
+s = json.load(sys.stdin)
+print("%s  overall %s" % (s["generated"], s["overall"].upper()))
+for c in s["checks"]:
+    if c["status"] != "ok":
+        print("  %-5s %-20s %s" % (c["status"], c["name"], c["summary"]))
+sys.exit({"ok": 0, "warn": 1}.get(s["overall"], 2))'
+    exit $?
+fi
+
+echo "tunnel: $URL  ->  $HOST:$REMOTE via $JUMP   (Ctrl-C to close)"
+if [ "$OPEN" = 1 ]; then
+    "${CMD[@]}" & pid=$!
+    trap 'kill $pid 2>/dev/null' INT TERM EXIT
+    if wait_up "$pid"; then
+        if command -v open >/dev/null; then open "$URL"
+        elif command -v xdg-open >/dev/null; then xdg-open "$URL" >/dev/null 2>&1
+        elif command -v wslview >/dev/null; then wslview "$URL"
+        else echo "open $URL in a browser"; fi
+    else
+        echo "mc1-status-tunnel: site did not answer at $URL" >&2
+    fi
+    wait "$pid"
+else
+    exec "${CMD[@]}"
+fi

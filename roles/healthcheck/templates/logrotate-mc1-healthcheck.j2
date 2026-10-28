@@ -1,0 +1,10 @@
+# {{ ansible_managed }}
+{{ mc1_hc_state_dir }}/cron.log {
+    weekly
+    rotate 8
+    compress
+    missingok
+    notifempty
+    su {{ mc1_hc_user }} {{ mc1_hc_group }}
+    create 0640 {{ mc1_hc_user }} {{ mc1_hc_group }}
+}

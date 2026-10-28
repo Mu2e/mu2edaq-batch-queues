@@ -54,6 +54,9 @@ flowchart LR
 | D22 | Proxy: `CVMFS_CLIENT_PROFILE=single` (WLCG WPAD) unless `mc1_cvmfs_http_proxy` is set | WPAD returns the Fermilab squids for on-site addresses, so no squid name is hard-coded. The role checks WPAD and stratum 1 reachability before installing and stops if neither answers. |
 | D23 | Cache at `/var/lib/cvmfs`, quota 20000 MB, checked against free space (+15%) before install | Workers 17–18 have no free space left in `os_vg` for a dedicated LV. The quota and location are per-host overridable. |
 | D24 | `mc1-fw-zone-guard` (firewall role) keeps a copy of the live `10_mc1_cluster.xml` in `/var/lib/mc1-slurm/firewalld` and restores it plus `firewall-cmd --reload` when it is missing: at boot before slurmd/slurmctld, whenever firewalld starts, and every 5 min (timer). `validate` reports `fw_zone_guard` per node | On 2026-10-16 site maintenance before a reboot deleted the zone file (seen on workers 01, 02 and 17; all 17 compute nodes lost the controller; the `.old`/`.bak` copies survived). Cluster traffic fell into `50_FNAL` (REJECT) and all compute nodes stayed `down*` for 12 days. This contradicts the D16 `--noop` evidence. The guard repairs, it does not prevent; asking SCD to carry the zone in SLAM was option (a) and was not chosen. |
+| D25 | Periodic health check `mc1-healthcheck` (Python 3.9, system Jinja2/PyYAML) on worker-01, from the crontab of `mu2ebatch` every 30 min; non-disruptive checks only (services, ping, disk, association, node states, one srun on all usable nodes for storage/CVMFS/controller port/zone guard, sbatch + sacct, memory limit, CPU binding, job array) | Runs where the Slurm tools and state are, so it does not depend on the operator machine or the gateway. A job account exercises the user submit path and needs no root. Root's crontab and `/etc/crontab` are SLAM Puppet's. Drain, restart and reboot tests stay manual. Full cluster = warn ("busy"), not fail. |
+| D26 | Status site: static HTML + `status.json`/`history.json` in `/var/www/mc1-status`, served by httpd on `127.0.0.1:80` only (`Require local`); viewed through an ssh tunnel (`scripts/mc1-status-tunnel`) | The gateway reaches worker-01 only on ssh, and the workstation not at all. Opening 80 would put the gateway into a project zone, which also re-homes its ssh and risks a lockout. Loopback + tunnel needs no firewall change and no auth layer. Static files: no app server to keep alive, and a run that dies leaves the last good page. |
+| D27 | Mail through the site Postfix (`sendmail -t`, relays to smtp.fnal.gov) on state change: turns bad, the failing set changes, every 12 h while bad, and once on recovery; `notify_on: fail` by default | Avoids a mail per run during a long outage. Postfix is Puppet-managed and already relays, so the role does not touch it. A failed send is not recorded and is retried on the next run. |
 
 ## Mechanisms
 
@@ -83,6 +86,10 @@ flowchart LR
   reloads firewalld when the file is present but the zone is not running.
   Taking the copy from the live file (rather than rendering it) keeps zone
   edits made by other roles, such as `nfs`. See `mc1-fw-zone-guard(8)`.
+- **Health check.** `mc1-healthcheck run` holds `run.lock`, so overlapping cron
+  runs skip. Every file is written to a temporary name and renamed. Test jobs
+  are named `mc1hc-*` and are cancelled by name after a timeout. The memory and
+  CPU checks use one node per run, rotating hourly. See `mc1-healthcheck(1)`.
 - **Puppet guard.** If `puppet.service` is running, preflight fails, since
   Puppet could revert local users, firewall rules or services. Setting
   `mc1_puppet_policy=warn` overrides this.

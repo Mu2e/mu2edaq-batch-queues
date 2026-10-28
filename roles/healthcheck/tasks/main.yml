@@ -1,0 +1,153 @@
+---
+# mc1-healthcheck on the controller (D25-D27).
+#
+# The checker (src/mc1_healthcheck) runs from the crontab of mc1_hc_user, a
+# job account, so it exercises the same submit path users take and needs no
+# root. It writes static pages to mc1_hc_web_dir; httpd serves them on
+# loopback only (no firewall change). Mail goes through the site Postfix
+# (/usr/sbin/sendmail), which this role does not touch. Root's crontab and
+# /etc/crontab belong to SLAM Puppet, hence the user crontab.
+
+- name: Packages (httpd; Jinja2 and PyYAML for the system python3)
+  ansible.builtin.dnf:
+    name: [httpd, python3-jinja2, python3-pyyaml]
+    state: present
+
+- name: Group of {{ mc1_hc_user }}
+  ansible.builtin.command: id -gn {{ mc1_hc_user }}
+  register: hc_group
+  changed_when: false
+  check_mode: false
+
+- name: Remember the group
+  ansible.builtin.set_fact:
+    mc1_hc_group: "{{ hc_group.stdout | trim }}"
+
+- name: Program directories (root-owned)
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ mc1_hc_prefix }}/lib/mc1_healthcheck/templates"
+    - /etc/mc1-healthcheck
+    - /usr/local/share/man/man1
+
+- name: State and web directories (owned by {{ mc1_hc_user }})
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ mc1_hc_user }}"
+    group: "{{ mc1_hc_group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: "{{ mc1_hc_state_dir }}", mode: "0750"}
+    - {path: "{{ mc1_hc_web_dir }}", mode: "0755"}
+
+# fileglob, not a directory copy: keeps local __pycache__ off the node.
+- name: Python package
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ mc1_hc_prefix }}/lib/mc1_healthcheck/"
+    owner: root
+    group: root
+    mode: "0644"
+  with_fileglob: "{{ playbook_dir }}/../src/mc1_healthcheck/*.py"
+
+- name: Page templates
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ mc1_hc_prefix }}/lib/mc1_healthcheck/templates/"
+    owner: root
+    group: root
+    mode: "0644"
+  with_fileglob: "{{ playbook_dir }}/../src/mc1_healthcheck/templates/*.j2"
+
+- name: Command /usr/local/bin/mc1-healthcheck
+  ansible.builtin.template:
+    src: mc1-healthcheck.py.j2
+    dest: /usr/local/bin/mc1-healthcheck
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Configuration /etc/mc1-healthcheck/config.yaml
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: /etc/mc1-healthcheck/config.yaml
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Man page
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../man/man1/mc1-healthcheck.1"
+    dest: /usr/local/share/man/man1/mc1-healthcheck.1
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Log rotation for the cron log
+  ansible.builtin.template:
+    src: logrotate-mc1-healthcheck.j2
+    dest: /etc/logrotate.d/mc1-healthcheck
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: httpd listens on {{ mc1_hc_web_listen }} only
+  ansible.builtin.lineinfile:
+    path: /etc/httpd/conf/httpd.conf
+    regexp: '^Listen\s'
+    line: "Listen {{ mc1_hc_web_listen }}"
+  notify: Restart httpd
+  ignore_errors: "{{ ansible_check_mode }}"   # httpd.conf absent before the package
+
+- name: httpd site for the status pages
+  ansible.builtin.template:
+    src: httpd-mc1-status.conf.j2
+    dest: /etc/httpd/conf.d/mc1-status.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart httpd
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: httpd running
+  ansible.builtin.systemd:
+    name: httpd
+    enabled: true
+    state: started
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: Apply httpd changes
+  ansible.builtin.meta: flush_handlers
+
+- name: Cron entry for {{ mc1_hc_user }}
+  ansible.builtin.cron:
+    name: mc1-healthcheck
+    user: "{{ mc1_hc_user }}"
+    minute: "{{ mc1_hc_cron_minute }}"
+    hour: "{{ mc1_hc_cron_hour }}"
+    job: "/usr/local/bin/mc1-healthcheck -q run >> {{ mc1_hc_state_dir }}/cron.log 2>&1"
+    state: "{{ 'present' if mc1_hc_enabled | bool else 'absent' }}"
+
+- name: First run (no mail), so the pages exist
+  ansible.builtin.command: runuser -u {{ mc1_hc_user }} -- /usr/local/bin/mc1-healthcheck run --no-mail
+  register: hc_first
+  changed_when: true
+  failed_when: hc_first.rc not in [0, 1, 2]
+  when: (mc1_hc_first_run | bool) and not ansible_check_mode
+
+- name: First run result
+  ansible.builtin.debug:
+    var: hc_first.stdout_lines
+  when: hc_first is not skipped and hc_first.stdout_lines is defined
+
+- name: The site answers on {{ mc1_hc_web_listen }}
+  ansible.builtin.uri:
+    url: "http://{{ mc1_hc_web_listen }}/status.json"
+    return_content: false
+  when: (mc1_hc_first_run | bool) and not ansible_check_mode

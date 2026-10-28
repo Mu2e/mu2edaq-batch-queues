@@ -1,0 +1,51 @@
+{% extends "base.html.j2" %}
+{% block head %}<meta http-equiv="refresh" content="{{ web.refresh_seconds }}">{% endblock %}
+{% block body %}
+<section class="banner" aria-label="Overall status">
+  <span class="big {{ status.overall }}">{{ status.overall }}</span>
+  <div>
+    <div><strong>{{ cfg.cluster }}</strong> · partition <code>{{ cfg.partition }}</code> · {{ status.generated }}</div>
+    <div class="muted">ok {{ status.counts.ok }} · warn {{ status.counts.warn }} · fail {{ status.counts.fail }} · skip {{ status.counts.skip }} · run took {{ "%.0f"|format(status.duration_s) }} s · page refreshes every {{ web.refresh_seconds }} s</div>
+  </div>
+</section>
+
+<h2>Checks</h2>
+<div class="scroll"><table>
+  <thead><tr><th>Status</th><th>Check</th><th>Result</th><th class="hide-sm c">Time</th></tr></thead>
+  <tbody>
+  {% for c in status.checks %}
+    <tr>
+      <td><span class="chip {{ c.status }}">{{ c.status }}</span></td>
+      <td><strong>{{ c.title }}</strong><br><code class="muted">{{ c.name }}</code></td>
+      <td>{{ c.summary }}
+        {% if c.details %}
+        <details{% if c.status in ("warn", "fail") %} open{% endif %}><summary>{{ c.details|length }} detail line{{ "s" if c.details|length != 1 }}</summary>
+          <ul>{% for d in c.details %}<li>{{ d }}</li>{% endfor %}</ul>
+        </details>
+        {% endif %}
+      </td>
+      <td class="hide-sm c mono">{{ "%.1f"|format(c.duration) }} s</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+
+{% if status.nodes %}
+<h2>Per node</h2>
+<div class="scroll"><table>
+  <thead><tr><th>Node</th>{% for n in node_checks %}<th class="c">{{ n|replace("node_", "")|replace("_", " ") }}</th>{% endfor %}</tr></thead>
+  <tbody>
+  {% for node, row in status.nodes.items() %}
+    <tr><td class="mono">{{ node }}</td>
+    {% for n in node_checks %}<td class="c">{% if row[n] is defined %}<span class="chip {{ row[n] }}">{{ row[n] }}</span>{% else %}<span class="muted">·</span>{% endif %}</td>{% endfor %}
+    </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+<p class="muted" style="margin-top:6px">memory limit and cpu binding test one node per run; the node rotates hourly.</p>
+{% endif %}
+
+<h2>Recent runs</h2>
+<p>{% for h in history[:96]|reverse %}<span class="cell {{ h.overall }}" title="{{ h.generated }}: {{ h.overall }}"></span>{% endfor %}</p>
+<p class="muted">Oldest left, newest right; {{ history[:96]|length }} runs shown. {{ "%.1f"|format(uptime_pct) }}% of the {{ history|length }} recorded runs were ok. <a href="history.html">Full history</a>.</p>
+{% endblock %}

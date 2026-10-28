@@ -21,7 +21,7 @@ trigger worker cluster** using Ansible, run from an operator workstation.
 - Every login goes by ProxyJump as **`mu2eshift@g2gateway01.fnal.gov`**, the
   user's rule, then as root on the workers.
 
-Design decisions D1–D24 and their reasons are in `docs/DESIGN.md`. The user guide
+Design decisions D1–D27 and their reasons are in `docs/DESIGN.md`. The user guide
 is `docs/GETTING-STARTED.md` (+ `.pdf`, rebuilt per README) and `web/index.html`;
 keep all three in step.
 
@@ -47,6 +47,8 @@ scripts/mc1-slurm-deploy deploy [--apply]        # --check --diff unless --apply
 scripts/mc1-slurm-deploy {storage,accounts,firewall,nfs,cvmfs} [--apply]   # one role
 scripts/mc1-slurm-deploy validate                # results/validate-<UTC>.json
 scripts/mc1-slurm-presurvey [-n]                 # raw read-only host survey (text reports)
+scripts/mc1-slurm-deploy healthcheck [--apply]   # mc1-healthcheck, cron, status site on worker-01
+scripts/mc1-status-tunnel -o                     # view the status site (ssh tunnel, port 8081)
 ```
 
 Pipe `ansible`/`ansible-playbook` output to a file, not to `head`, and run with
@@ -81,6 +83,13 @@ the user the command to run with the `!` prefix.
   oneshot unit and a 5 min timer. It restores `10_mc1_cluster.xml` from
   `/var/lib/mc1-slurm/firewalld` if site maintenance deletes it, which
   happened on 2026-10-16.
+- **Health check (D25–D27).** `src/mc1_healthcheck` (stdlib + Jinja2 2.11 +
+  PyYAML 5.4, the EL9 system packages; keep templates 2.11-compatible) is
+  deployed by `roles/healthcheck` to `/opt/mc1-healthcheck` on worker-01. It
+  runs from mu2ebatch's crontab, writes `/var/www/mc1-status` (httpd on
+  127.0.0.1:80 only), and mails via the site Postfix on state change. View it
+  with `scripts/mc1-status-tunnel`. `tests/test_healthcheck.py` drives it
+  against a fake Slurm.
 - **Check mode on fresh nodes.** Tasks that need files created by packages
   carry `ignore_errors: "{{ ansible_check_mode }}"`, and runtime commands
   such as `sacctmgr` and `wait_for` are skipped in check mode. Keep that
@@ -135,7 +144,7 @@ defects). Those belong in `docs/private/` and the private tracker.
 
 ## Testing
 
-`venv/bin/python -m pytest -q tests`: 51 tests, offline, about 13 s; also run
+`venv/bin/python -m pytest -q tests`: 85 tests, offline, about 13 s; also run
 them under a Python 3.9 / ansible-core 2.15 venv. Live
 validation on the cluster is `scripts/mc1-slurm-deploy validate`. Its JSON keys
 match the tracker's test-matrix rows.

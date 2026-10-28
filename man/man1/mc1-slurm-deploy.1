@@ -3,7 +3,7 @@
 mc1-slurm-deploy \- install, check and validate Slurm on the Mu2e MC1 trigger cluster
 .SH SYNOPSIS
 .B mc1-slurm-deploy
-.RB { preflight | deploy | storage | accounts | firewall | nfs | cvmfs | validate }
+.RB { preflight | deploy | storage | accounts | firewall | nfs | cvmfs | healthcheck | validate }
 .RB [ \-\-apply ]
 .RB [ \-\-limit
 .IR pattern ]
@@ -111,6 +111,16 @@ a MUNGE round trip, srun and sbatch on every compute node, cgroup memory
 enforcement, a multi-node step, a listing of every CVMFS repository from a job
 on each compute node, and sacct records. It writes
 .IR results/validate-<UTC>.json .
+.TP
+.B healthcheck
+Only the periodic health check on the controller: the
+.BR mc1-healthcheck (1)
+program and configuration, the cron entry of
+.BR mc1_hc_user ,
+and httpd on 127.0.0.1:80 serving the status pages. With
+.B \-\-apply
+it ends with one run (no mail) and checks that the site answers. Also part of
+.BR deploy .
 .SH OPTIONS
 .TP
 .B \-\-apply

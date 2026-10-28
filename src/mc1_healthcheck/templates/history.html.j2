@@ -1,0 +1,19 @@
+{% extends "base.html.j2" %}
+{% block title %}History · {{ web.title }}{% endblock %}
+{% block body %}
+<h1>History</h1>
+<p>The last {{ history|length }} runs, newest first (at most {{ web.history_runs }} are kept). {{ "%.1f"|format(uptime_pct) }}% were ok. Raw data: <a href="history.json">history.json</a>.</p>
+<div class="scroll"><table>
+  <thead><tr><th>Run</th><th class="c">Overall</th>{% for n in columns %}<th class="c" title="{{ n }}">{{ n|replace("controller_", "ctl ")|replace("node_", "")|replace("_", " ") }}</th>{% endfor %}<th class="c hide-sm">Time</th></tr></thead>
+  <tbody>
+  {% for h in history %}
+    <tr>
+      <td class="mono">{{ h.generated }}</td>
+      <td class="c"><span class="chip {{ h.overall }}">{{ h.overall }}</span></td>
+      {% for n in columns %}<td class="c">{% if h.checks[n] is defined %}<span class="cell {{ h.checks[n] }}" title="{{ n }}: {{ h.checks[n] }}"></span>{% endif %}</td>{% endfor %}
+      <td class="c mono hide-sm">{{ "%.0f"|format(h.duration_s) }} s</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% endblock %}

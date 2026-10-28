@@ -1,0 +1,8 @@
+---
+# mc1-healthcheck on the controller: checker, cron entry, httpd (loopback),
+# status pages. The same role runs at the end of site.yml.
+- name: Health check and status site
+  hosts: slurm_controller
+  gather_facts: false
+  roles:
+    - healthcheck

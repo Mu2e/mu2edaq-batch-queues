@@ -6,6 +6,7 @@
 #   4. controller           packages, firewall, slurmdbd, then slurmctld
 #   5. compute              packages, firewall, slurmd (needs slurmctld up)
 #   6. cvmfs                CVMFS client, /cvmfs/<repo> mounts on every worker
+#   7. healthcheck          mc1-healthcheck, cron, status site on worker-01
 - import_playbook: preflight.yml
 
 - import_playbook: storage.yml
@@ -35,3 +36,5 @@
     - slurmd
 
 - import_playbook: cvmfs.yml
+
+- import_playbook: healthcheck.yml

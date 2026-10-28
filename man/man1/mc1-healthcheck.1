@@ -1,0 +1,267 @@
+.TH MC1-HEALTHCHECK 1 "2026-10-28" "mu2edaq-batch-queues" "Mu2e DAQ Tools"
+.SH NAME
+mc1-healthcheck \- Slurm health checks for the MC1 cluster, with a status web site and mail on problems
+.SH SYNOPSIS
+.B mc1-healthcheck
+.RB [ \-c
+.IR config ]
+.RB [ \-\-set
+.IR key=value ]...
+.RB [ \-q ]
+.B run
+.RB [ \-\-only
+.IR check[,check...] ]
+.RB [ \-\-no\-mail ]
+.RB [ \-\-no\-web ]
+.RB [ \-\-dry\-run ]
+.RB [ \-\-json ]
+.br
+.B mc1-healthcheck
+.RI [ options ]
+.BR render " | " mail\-test " [" \-\-to
+.IR addr ]
+.RB " | " list " | " config
+.SH DESCRIPTION
+.B mc1-healthcheck
+runs on the Slurm controller,
+.BR mu2e-mc1-worker-01 ,
+from the crontab of the job account
+.B mu2ebatch
+(every 30 minutes by default). Each run:
+.IP 1. 3
+runs the checks below as the invoking user. They only read state or submit
+small jobs named
+.BR mc1hc\-* ;
+nothing is restarted, drained or rebooted;
+.IP 2.
+writes
+.I status.json
+and
+.I history.json
+to the state directory and, with the HTML pages, to the web directory served by
+httpd on the controller's loopback interface;
+.IP 3.
+mails
+.B mail.to
+when the overall state turns bad, when the set of failing checks changes, every
+.B mail.reminder_hours
+while it stays bad, and once when it recovers.
+.PP
+A run that finds another run still in progress (lock
+.IR <state_dir>/run.lock )
+exits with status 4 without doing anything.
+.SH CHECKS
+.TP
+.B controller_services
+.BR "systemctl is-active" " of slurmctld, slurmdbd, mariadb, munge and"
+.BR mc1-fw-zone-guard.timer ,
+and the last result of
+.BR mc1-fw-zone-guard.service .
+.TP
+.B controller_ping
+.B scontrol ping
+reports slurmctld UP. If not, the node and job checks are skipped.
+.TP
+.B controller_disk
+Free space on each path in
+.B controller_paths
+(GiB); below the minimum is a warning.
+.TP
+.B accounting
+.B sacctmgr
+answers and the running user has an association. Without one,
+.B AccountingStorageEnforce
+rejects the user's jobs.
+.TP
+.B node_states
+.BR sinfo :
+each node in
+.B expected_nodes
+is idle, mixed or allocated. Drained is a warning; down, not responding
+.RB ( * )
+or absent is a failure. Only usable nodes take part in the job checks.
+.TP
+.B node_probe
+One
+.B srun
+across every usable node, reported as five checks:
+.B node_srun
+(the node ran the task),
+.B node_storage
+(each
+.B node_paths
+entry writable, free space above its minimum),
+.B node_cvmfs
+(each repository lists),
+.B node_ctld_port
+(TCP connect to slurmctld) and
+.B node_zone_guard
+(the D24 timer is active).
+.TP
+.B sbatch_roundtrip
+.B sbatch \-\-wait
+of a one-node job, then
+.B sacct
+shows COMPLETED.
+.TP
+.B memory_limit
+A 64 MB job that allocates 512 MB must be killed by the cgroup limit.
+.TP
+.B cpu_binding
+.B srun \-c2 nproc
+prints 2.
+.TP
+.B job_array
+A 4-task array; all COMPLETED in
+.BR sacct .
+.PP
+.B memory_limit
+and
+.B cpu_binding
+use one node per run, rotating hourly, so every node is covered within a day.
+If the cluster is full,
+.B srun \-\-immediate
+gives up after
+.B srun_immediate
+seconds. The check is then a warning ("cluster busy"), not a failure.
+.SH COMMANDS
+.TP
+.B run
+(default) Run, write, mail.
+.B \-\-only
+limits the checks; controller_ping and node_states are added when a job check
+needs them.
+.B \-\-no\-mail
+sends nothing, but the notification state is still updated.
+.B \-\-no\-web
+skips the web directory.
+.B \-\-dry\-run
+runs the checks, writes nothing, sends nothing, and prints the mail that would
+go out.
+.B \-\-json
+prints status.json.
+.TP
+.B render
+Rebuild the HTML from the saved status and history without running checks
+(for example, after a template change).
+.TP
+.B mail\-test
+Send a test message to
+.B mail.to
+or
+.BR \-\-to .
+.TP
+.B list
+The checks; enabled ones are marked *.
+.TP
+.B config
+Print the effective configuration as JSON.
+.SH OPTIONS
+.TP
+.BI \-c " file" "\fR, \fP\-\-config " file
+YAML configuration. Env
+.BR MC1_HC_CONFIG ;
+default
+.IR /etc/mc1-healthcheck/config.yaml .
+.TP
+.BI \-\-set " key=value"
+Override any setting; nested keys use dots
+.RB ( mail.enabled=false ,
+.BR web.dir=/tmp/www ).
+Values are parsed as YAML; list keys take comma-separated values.
+.TP
+.BR \-q ", " \-\-quiet
+Print only when the result is not ok (used by cron).
+.SH CONFIGURATION
+Precedence: command line > environment > .env (next to the config file, then
+the current directory) > config file > built-in defaults. Environment
+variables:
+.BR MC1_HC_CONFIG ,
+.BR MC1_HC_PARTITION ,
+.BR MC1_HC_CONTROLLER ,
+.BR MC1_HC_EXPECTED_NODES ,
+.BR MC1_HC_CHECKS ,
+.BR MC1_HC_STATE_DIR ,
+.BR MC1_HC_WEB_ENABLED ,
+.BR MC1_HC_WEB_DIR ,
+.BR MC1_HC_MAIL_ENABLED ,
+.BR MC1_HC_MAIL_TO ,
+.BR MC1_HC_MAIL_FROM ,
+.BR MC1_HC_SMTP_HOST ,
+.BR MC1_HC_NOTIFY_ON .
+.PP
+The deployed file is rendered by the Ansible role
+.B healthcheck
+from the
+.B mc1_hc_*
+variables in
+.IR config/group_vars/all.yml .
+Edit those and run
+.BR "mc1-slurm-deploy healthcheck \-\-apply" .
+.PP
+.EX
+cluster: mc1
+partition: mc1
+controller: mu2e-mc1-worker-01.fnal.gov
+expected_nodes: [mu2e-mc1-worker-02, ..., mu2e-mc1-worker-18]
+node_paths: {/scratch: 10, /data-local: 50}   # min free GiB
+srun_immediate: 120                          # s to wait for free cores
+state_dir: /var/lib/mc1-healthcheck
+web: {dir: /var/www/mc1-status, history_runs: 336}
+mail:
+  to: [anorman@fnal.gov]
+  notify_on: fail          # fail | warn
+  reminder_hours: 12
+  send_recovery: true
+  smtp_host: ""            # empty = /usr/sbin/sendmail -t
+.EE
+.SH EXIT STATUS
+0 ok, 1 warn, 2 fail, 3 the checks ran but results could not be written or mail
+could not be sent (mail is retried on the next run), 4 another run is in
+progress, 64 usage or configuration error.
+.SH FILES
+.TP
+.I /etc/mc1-healthcheck/config.yaml
+Configuration.
+.TP
+.I /var/lib/mc1-healthcheck/
+.IR status.json ,
+.IR history.json ,
+.I notify.json
+(mail decision state),
+.IR run.lock ,
+.I cron.log
+(rotated weekly).
+.TP
+.I /var/www/mc1-status/
+The site: index.html, history.html, api.html, about.html, sitemap.html,
+status.json, history.json.
+.TP
+.I /etc/httpd/conf.d/mc1-status.conf
+httpd site; httpd listens on 127.0.0.1:80 only.
+.SH EXAMPLES
+On the controller, as mu2ebatch:
+.PP
+.EX
+mc1-healthcheck run --no-mail                 # full run, no mail
+mc1-healthcheck run --only node_states,node_probe --no-web --no-mail
+mc1-healthcheck run --dry-run                 # show the mail that would be sent
+mc1-healthcheck mail-test                     # check the mail path
+mc1-healthcheck --set mail.notify_on=warn run # mail on warnings this once
+crontab -l                                    # the cron entry
+tail /var/lib/mc1-healthcheck/cron.log
+.EE
+.PP
+From the operator machine:
+.PP
+.EX
+scripts/mc1-status-tunnel -o                  # tunnel and open the browser
+curl -s http://localhost:8081/status.json | jq .overall
+.EE
+.SH SEE ALSO
+.BR mc1-status-tunnel (1),
+.BR mc1-slurm-deploy (1),
+.BR mc1-fw-zone-guard (8),
+.BR sinfo (1),
+.BR srun (1),
+.BR crontab (5)

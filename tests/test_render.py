@@ -100,7 +100,7 @@ def test_validate_results(rendered):
     assert c["sacct_records"] == ["17|COMPLETED"]
 
 
-@pytest.mark.parametrize("playbook", ["preflight.yml", "site.yml", "storage.yml", "firewall.yml", "accounts.yml", "nfs.yml", "cvmfs.yml", "validate.yml"])
+@pytest.mark.parametrize("playbook", ["preflight.yml", "site.yml", "storage.yml", "firewall.yml", "accounts.yml", "nfs.yml", "cvmfs.yml", "validate.yml", "healthcheck.yml"])
 def test_playbook_syntax(playbook, ansible_env):
     exe = ansible_bin("ansible-playbook")
     if exe is None:
@@ -165,3 +165,29 @@ def test_fw_zone_guard_units(rendered):
     assert "OnUnitActiveSec=5min" in (rendered / "mc1-fw-zone-guard.timer").read_text()
     env = dict(l.split("=", 1) for l in conf_lines(rendered / "mc1-fw-zone-guard.sysconfig"))
     assert env == {"MC1_FW_ZONE": "10_mc1_cluster", "MC1_FW_GUARD_STORE": "/var/lib/mc1-slurm/firewalld"}
+
+
+def test_healthcheck_config(rendered):
+    import yaml
+    import sys
+    sys.path.insert(0, str(ROOT / "src"))
+    from mc1_healthcheck import config
+    path = rendered / "mc1-healthcheck.yaml"
+    cfg = config.load(str(path), environ={})
+    assert cfg["partition"] == "mc1"
+    assert cfg["controller"] == "mu2e-mc1-worker-01.fnal.gov"
+    assert cfg["expected_nodes"] == ["mu2e-mc1-worker-%02d" % i for i in range(2, 19)]
+    assert cfg["services"][-1] == "mc1-fw-zone-guard.timer" and cfg["zone_guard"] is True
+    assert cfg["mail"]["to"] == ["anorman@fnal.gov"]
+    assert cfg["mail"]["from"] == "mu2ebatch@mu2e-mc1-worker-01.fnal.gov"
+    assert "-L 8081:127.0.0.1:80 -J mu2eshift@g2gateway01.fnal.gov" in cfg["web"]["access"]
+    assert set(yaml.safe_load(path.read_text())) <= set(config.DEFAULTS)
+
+
+def test_healthcheck_httpd_and_wrapper(rendered):
+    conf = (rendered / "httpd-mc1-status.conf").read_text()
+    assert 'DocumentRoot "/var/www/mc1-status"' in conf and "Require local" in conf
+    assert "Options -Indexes" in conf
+    wrapper = (rendered / "mc1-healthcheck").read_text()
+    assert wrapper.startswith("#!/usr/bin/python3") and 'sys.path.insert(0, "/opt/mc1-healthcheck/lib")' in wrapper
+    assert "su mu2ebatch mu2e" in (rendered / "logrotate-mc1-healthcheck").read_text()

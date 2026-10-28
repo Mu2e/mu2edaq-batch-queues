@@ -84,6 +84,29 @@ scontrol update nodename=mu2e-mc1-worker-[02-18] state=resume
 A slurmd that started while the zone was missing may be `failed (timeout)`;
 `systemctl restart slurmd` on that node. See `man man/man8/mc1-fw-zone-guard.8`.
 
+## Health check, status page and mail
+
+`mc1-healthcheck` runs every 30 min from the crontab of `mu2ebatch` on worker-01
+(D25–D27). It writes the status site and mails `mc1_hc_mail_to` when the state
+turns bad, changes, stays bad for 12 h, or recovers. Deploy or update it with:
+
+```sh
+scripts/mc1-slurm-deploy healthcheck          # dry run
+scripts/mc1-slurm-deploy healthcheck --apply  # ends with one run (no mail) and a check of the site
+```
+
+The site listens on worker-01's loopback interface only. To view it:
+
+```sh
+scripts/mc1-status-tunnel -o      # ssh -L 8081:127.0.0.1:80 -J mu2eshift@g2gateway01 ...; opens http://localhost:8081/
+scripts/mc1-status-tunnel -c      # print the overall status and anything not ok, then close
+```
+
+On worker-01, as mu2ebatch: `mc1-healthcheck run --no-mail`, `mc1-healthcheck
+run --dry-run` (shows the mail that would go out), `mc1-healthcheck mail-test`,
+and `tail /var/lib/mc1-healthcheck/cron.log`. Settings are the `mc1_hc_*`
+variables in `config/group_vars/all.yml`; see `man man/man1/mc1-healthcheck.1`.
+
 ## Local volumes (/scratch, /data-local)
 
 `mc1_local_volumes` in `config/group_vars/all.yml` defines LVs carved from

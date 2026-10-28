@@ -1,0 +1,17 @@
+# {{ ansible_managed }}
+# mc1-healthcheck status site (D26). httpd listens on {{ mc1_hc_web_listen }} only
+# (Listen in httpd.conf), so it is reachable through an ssh tunnel and nowhere
+# else; "Require local" refuses anything that is not loopback as well.
+ServerName {{ inventory_hostname }}
+ServerTokens Prod
+ServerSignature Off
+DocumentRoot "{{ mc1_hc_web_dir }}"
+<Directory "{{ mc1_hc_web_dir }}">
+    Options -Indexes -FollowSymLinks
+    AllowOverride None
+    Require local
+</Directory>
+<FilesMatch "\.(json|html)$">
+    Header set Cache-Control "no-cache"
+</FilesMatch>
+AddType application/json .json

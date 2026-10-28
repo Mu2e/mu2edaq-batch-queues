@@ -39,6 +39,7 @@ PLAYBOOKS = {
     "nfs": "playbooks/nfs.yml",
     "cvmfs": "playbooks/cvmfs.yml",
     "validate": "playbooks/validate.yml",
+    "healthcheck": "playbooks/healthcheck.yml",
 }
 # Environment variables with a dedicated Ansible variable.
 ENV_VARS = {

@@ -39,10 +39,12 @@ mu2eshift's and mu2edaq's on each node. See [docs/INSTALL.md](docs/INSTALL.md).
 config/   inventory.yml              controller and compute groups
           group_vars/all.yml         every setting (accounts, ports, partitions, slurmdbd)
 playbooks/ preflight.yml storage.yml site.yml nfs.yml cvmfs.yml validate.yml
-roles/    preflight storage accounts munge slurm_common firewall slurmdbd slurmctld slurmd nfs cvmfs
+roles/    preflight storage accounts munge slurm_common firewall slurmdbd slurmctld slurmd nfs cvmfs healthcheck
 scripts/  mc1-slurm-deploy           wrapper: CLI > env > .env > config overrides
           mc1-slurm-presurvey        read-only host survey over ssh
           mc1-cvmfs-fetch-rpms       CVMFS client RPMs, sha256-verified, for the cvmfs role
+          mc1-status-tunnel          ssh tunnel to the health status site on worker-01
+src/      mc1_healthcheck/           periodic checks, status pages, mail (deployed to worker-01)
 man/      man1/ man8/                man pages for every script; man8: mc1-fw-zone-guard (node side)
 docs/     GETTING-STARTED.md/.pdf     user guide (also web/index.html)
           DESIGN.md INSTALL.md USAGE.md   design; install/operations; job reference

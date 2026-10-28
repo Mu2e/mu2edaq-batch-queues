@@ -1,0 +1,35 @@
+# {{ ansible_managed }}
+# mc1-healthcheck configuration; see mc1-healthcheck(1). Values are JSON,
+# which is valid YAML. Overrides: --set key=value > MC1_HC_* > .env > this file.
+cluster: {{ slurm_cluster_name | to_json }}
+partition: {{ (slurm_partitions | selectattr('default', 'defined') | selectattr('default') | map(attribute='name') | list + slurm_partitions | map(attribute='name') | list) | first | to_json }}
+controller: {{ groups['slurm_controller'] | first | to_json }}
+controller_port: {{ slurm_ports.slurmctld }}
+expected_nodes: {{ groups['slurm_compute'] | map('regex_replace', '\\..*$', '') | list | to_json }}
+services: {{ (['slurmctld', 'slurmdbd', 'mariadb', 'munge'] + (['mc1-fw-zone-guard.timer'] if mc1_fw_guard_enabled | bool else [])) | to_json }}
+zone_guard: {{ mc1_fw_guard_enabled | bool | to_json }}
+cvmfs_repositories: {{ mc1_cvmfs_repositories | to_json }}
+node_paths: {{ mc1_hc_node_paths | to_json }}
+controller_paths: {{ mc1_hc_controller_paths | to_json }}
+checks: {{ mc1_hc_checks | to_json }}
+srun_immediate: 120
+job_time_limit: 3
+command_timeout: 300
+state_dir: {{ mc1_hc_state_dir | to_json }}
+web:
+  enabled: true
+  dir: {{ mc1_hc_web_dir | to_json }}
+  history_runs: 336
+  refresh_seconds: 300
+  title: "MC1 Slurm health"
+  access: {{ ('scripts/mc1-status-tunnel   (or: ssh -N -L ' ~ mc1_hc_tunnel_port ~ ':' ~ mc1_hc_web_listen ~ ' -J ' ~ mc1_jump ~ ' <user>@' ~ (groups['slurm_controller'] | first) ~ '), then http://localhost:' ~ mc1_hc_tunnel_port ~ '/') | to_json }}
+mail:
+  enabled: true
+  to: {{ mc1_hc_mail_to | to_json }}
+  from: {{ (mc1_hc_user ~ '@' ~ (groups['slurm_controller'] | first)) | to_json }}
+  sendmail: /usr/sbin/sendmail
+  smtp_host: ""
+  notify_on: {{ mc1_hc_notify_on | to_json }}
+  reminder_hours: {{ mc1_hc_reminder_hours }}
+  send_recovery: true
+  subject_prefix: "[mc1-healthcheck]"
