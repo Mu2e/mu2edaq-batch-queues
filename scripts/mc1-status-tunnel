@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # mc1-status-tunnel: open an ssh tunnel to the mc1-healthcheck status site on
 # the controller and (optionally) open it in a browser. The site listens on the
-# controller's loopback interface only (D26), so a tunnel is the way in.
+# controller to loopback clients only (Require local, D26), so a tunnel is the way in.
 #
 # Settings: options > environment (MC1_JUMP, MC1_HC_TUNNEL_USER,
 # MC1_HC_TUNNEL_PORT, MC1_HC_HOST, MC1_HC_REMOTE) > defaults. See

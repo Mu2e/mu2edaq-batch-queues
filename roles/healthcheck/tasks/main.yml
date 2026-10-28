@@ -3,8 +3,8 @@
 #
 # The checker (src/mc1_healthcheck) runs from the crontab of mc1_hc_user, a
 # job account, so it exercises the same submit path users take and needs no
-# root. It writes static pages to mc1_hc_web_dir; httpd serves them on
-# loopback only (no firewall change). Mail goes through the site Postfix
+# root. It writes static pages to mc1_hc_web_dir; httpd listens on
+# mc1_hc_web_listen and serves them to loopback clients only (Require local). Mail goes through the site Postfix
 # (/usr/sbin/sendmail), which this role does not touch. Root's crontab and
 # /etc/crontab belong to SLAM Puppet, hence the user crontab.
 
@@ -97,7 +97,7 @@
     group: root
     mode: "0644"
 
-- name: httpd listens on {{ mc1_hc_web_listen }} only
+- name: httpd Listen {{ mc1_hc_web_listen }}
   ansible.builtin.lineinfile:
     path: /etc/httpd/conf/httpd.conf
     regexp: '^Listen\s'
@@ -148,8 +148,8 @@
     var: hc_first.stdout_lines
   when: hc_first is not skipped and hc_first.stdout_lines is defined
 
-- name: The site answers on {{ mc1_hc_web_listen }}
+- name: The site answers on loopback
   ansible.builtin.uri:
-    url: "http://{{ mc1_hc_web_listen }}/status.json"
+    url: "http://127.0.0.1:{{ mc1_hc_web_listen | string | regex_replace('^.*:', '') }}/status.json"
     return_content: false
   when: (mc1_hc_first_run | bool) and not ansible_check_mode

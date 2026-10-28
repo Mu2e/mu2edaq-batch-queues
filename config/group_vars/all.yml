@@ -186,14 +186,14 @@ mc1_fw_guard_interval: 5min                         # timer period (systemd time
 
 # ------------------------------------------------------------ healthcheck ---
 # mc1-healthcheck on the controller (roles/healthcheck, D25-D27): cron runs the
-# checks as mc1_hc_user, writes a static site served by httpd on loopback only,
+# checks as mc1_hc_user, writes a static site served by httpd (Require local),
 # and mails mc1_hc_mail_to on problems. View: scripts/mc1-status-tunnel.
 mc1_hc_enabled: true
 mc1_hc_user: mu2ebatch                 # job account the checks run as (needs an association)
 mc1_hc_prefix: /opt/mc1-healthcheck
 mc1_hc_state_dir: /var/lib/mc1-healthcheck
 mc1_hc_web_dir: /var/www/mc1-status
-mc1_hc_web_listen: "127.0.0.1:80"      # loopback only: no firewall opening (D26)
+mc1_hc_web_listen: "80"               # httpd Listen: all addresses; reach is set by Require local + firewall (D26)
 mc1_hc_tunnel_port: 8081               # local port suggested for the ssh tunnel
 mc1_hc_cron_minute: "*/30"
 mc1_hc_cron_hour: "*"

@@ -95,7 +95,8 @@ scripts/mc1-slurm-deploy healthcheck          # dry run
 scripts/mc1-slurm-deploy healthcheck --apply  # ends with one run (no mail) and a check of the site
 ```
 
-The site listens on worker-01's loopback interface only. To view it:
+httpd on worker-01 listens on all addresses, but serves the site to loopback clients only
+(`Require local`), and the site firewall rejects port 80. To view it:
 
 ```sh
 scripts/mc1-status-tunnel -o      # ssh -L 8081:127.0.0.1:80 -J mu2eshift@g2gateway01 ...; opens http://localhost:8081/

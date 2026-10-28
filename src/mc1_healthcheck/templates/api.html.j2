@@ -2,7 +2,7 @@
 {% block title %}API · {{ web.title }}{% endblock %}
 {% block body %}
 <h1>API</h1>
-<p>The site is static: every route is a file rewritten by each run (atomic rename, so a reader never sees a partial file). There are no query parameters, no POST and no authentication; access is limited by the loopback-only listener.</p>
+<p>The site is static: every route is a file rewritten by each run (atomic rename, so a reader never sees a partial file). There are no query parameters, no POST and no authentication; access is limited to loopback clients (<code>Require local</code>).</p>
 
 <h2>Routes</h2>
 <div class="scroll"><table>

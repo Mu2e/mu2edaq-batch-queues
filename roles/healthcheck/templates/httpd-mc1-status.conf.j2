@@ -1,7 +1,7 @@
 # {{ ansible_managed }}
-# mc1-healthcheck status site (D26). httpd listens on {{ mc1_hc_web_listen }} only
-# (Listen in httpd.conf), so it is reachable through an ssh tunnel and nowhere
-# else; "Require local" refuses anything that is not loopback as well.
+# mc1-healthcheck status site (D26). httpd listens on {{ mc1_hc_web_listen }} (Listen in
+# httpd.conf). "Require local" serves loopback clients only, i.e. ssh tunnels;
+# the site firewall (50_FNAL) also rejects port 80 from the network.
 ServerName {{ inventory_hostname }}
 ServerTokens Prod
 ServerSignature Off

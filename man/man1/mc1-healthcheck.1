@@ -39,7 +39,7 @@ writes
 and
 .I history.json
 to the state directory and, with the HTML pages, to the web directory served by
-httpd on the controller's loopback interface;
+httpd on the controller to loopback clients;
 .IP 3.
 mails
 .B mail.to
@@ -238,7 +238,7 @@ The site: index.html, history.html, api.html, about.html, sitemap.html,
 status.json, history.json.
 .TP
 .I /etc/httpd/conf.d/mc1-status.conf
-httpd site; httpd listens on 127.0.0.1:80 only.
+httpd site: loopback clients only (Require local); httpd listens on port 80.
 .SH EXAMPLES
 On the controller, as mu2ebatch:
 .PP

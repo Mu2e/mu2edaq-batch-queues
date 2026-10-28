@@ -19,7 +19,7 @@ mc1-status-tunnel \- ssh tunnel to the MC1 Slurm health status site
 .SH DESCRIPTION
 The status pages written by
 .BR mc1-healthcheck (1)
-are served by httpd on the loopback interface of
+are served by httpd only to loopback clients of
 .B mu2e-mc1-worker-01
 only (design decision D26), so no firewall port is open. This script forwards
 a local port to that address through the G2 gateway, using Kerberos (GSSAPI)
